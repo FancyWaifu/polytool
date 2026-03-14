@@ -19,10 +19,11 @@ Usage:
 
 import sys
 import shutil
+import argparse
 from pathlib import Path
 
-DYLIB = Path("/Applications/Poly Studio.app/Contents/Helpers/LensService.app"
-             "/Contents/MacOS/clockwork/PolyDolphin.dylib")
+DEFAULT_APP = Path("/Applications/Poly Studio.app")
+DYLIB_REL = Path("Contents/Helpers/LensService.app/Contents/MacOS/clockwork/PolyDolphin.dylib")
 
 PATCHES = [
     {
@@ -53,7 +54,14 @@ def read_at(data, offset, length):
 
 
 def main():
-    revert = "--revert" in sys.argv
+    parser = argparse.ArgumentParser(description="Patch PolyDolphin.dylib for non-HP VID support")
+    parser.add_argument("--revert", action="store_true", help="Revert to original bytes")
+    parser.add_argument("--app", type=str, default=str(DEFAULT_APP),
+                        help="Path to Poly Studio.app (default: /Applications/Poly Studio.app)")
+    args = parser.parse_args()
+
+    revert = args.revert
+    DYLIB = Path(args.app) / DYLIB_REL
 
     if not DYLIB.exists():
         print(f"Error: {DYLIB} not found")
