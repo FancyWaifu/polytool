@@ -220,6 +220,8 @@ DFU_EXECUTOR_MAP = {
     "113": "usbdfu", "101": "usbdfu",
     # Blackwire 7225 (HidTiDfu)
     "4304": "HidTiDfu",
+    # Blackwire 3220 (CX2070x EEPROM flash via HID)
+    "c056": "CxEepromDfu",
 }
 
 # DFU transport info: executor → (transport, firmware format, platform support)
@@ -228,8 +230,9 @@ DFU_TRANSPORT_INFO = {
     "HidTiDfu":   ("BladeRunner FTP (USB HID)", "FIRMWARE container", "Cross-platform (experimental)"),
     "SyncDfu":    ("BladeRunner FTP (USB HID)", "APPUHDR5 / QCC5xxx", "Cross-platform (experimental)"),
     "StudioDfu":  ("BladeRunner FTP (USB HID)", "FIRMWARE container", "Cross-platform (experimental)"),
-    "LegacyDfu":  ("FWU API (0x4Fxx)", "FWU", "Windows only (requires PLTDeviceManager)"),
+    "LegacyDfu":  ("FWU API (0x4Fxx)", "FWU", "Cross-platform (requires pyusb)"),
     "usbdfu":     ("USB DFU class", "CSR-dfu2", "Cross-platform (untested)"),
+    "CxEepromDfu": ("CX2070x EEPROM (USB HID)", "S-record PTC", "Cross-platform"),
 }
 
 # Device category classification
@@ -240,6 +243,34 @@ DEVICE_CATEGORIES = {
     "camera": ["Studio", "Webcam", "Cam", "Cinnamon"],
     "adapter": ["BT Adapter", "BT600", "DA45", "MDA200", "BlueMax"],
 }
+
+
+def _normalize_version(v):
+    """Normalize a firmware version string for comparison.
+
+    Cloud returns formats like:
+      "0225_0_0"       → 225  (underscores separate sub-components)
+      "3861.3039.100"  → 3861 (dots separate sub-components when 3+ parts)
+    Device BCD returns:
+      "2.25"           → 225  (single dot = BCD decimal, rejoin digits)
+      "38.61"          → 3861 (single dot = BCD decimal, rejoin digits)
+      "3861"           → 3861 (raw digits)
+    """
+    if not v:
+        return 0
+    # Strip sub-components after underscore
+    v = v.split("_")[0]
+    parts = v.split(".")
+    if len(parts) <= 2:
+        # BCD format: "2.25" → "225", "38.61" → "3861", "3861" → "3861"
+        digits = "".join(parts)
+    else:
+        # Multi-component cloud format: "3861.3039.100" → take first component "3861"
+        digits = parts[0]
+    try:
+        return int(digits.lstrip("0") or "0")
+    except ValueError:
+        return 0
 
 
 # ── Data Classes ─────────────────────────────────────────────────────────────
@@ -294,11 +325,15 @@ class PolyDevice:
         if self.firmware_version:
             return self.firmware_version
         if self.release_number > 0:
-            # USB bcdDevice is BCD-encoded: 0x3861 → "3861"
+            # USB bcdDevice is BCD-encoded: 0x0225 → "2.25", 0x3861 → "38.61"
             digits = []
             for shift in (12, 8, 4, 0):
                 digits.append(str((self.release_number >> shift) & 0xF))
-            return "".join(digits).lstrip("0") or "0"
+            raw = "".join(digits).lstrip("0") or "0"
+            # Insert decimal: last two digits are minor version
+            if len(raw) <= 2:
+                return "0." + raw.zfill(2)
+            return raw[:-2] + "." + raw[-2:]
         return "unknown"
 
     @property
@@ -603,13 +638,38 @@ def try_read_battery(dev: PolyDevice) -> bool:
     return False
 
 
+def _try_cx2070x_serial(h) -> str:
+    """Try reading serial number from CX2070x EEPROM (Blackwire 3220 etc.).
+    Protocol: write [RID=4, CMD_EEPROM_READ, len, addr_hi, addr_lo, ...pad]
+    then read response on RID 5."""
+    CX_RID_OUT = 0x04
+    CX_CMD_EEPROM_READ = 0x20
+    SERIAL_ADDR = 0x005E  # CX2070x serial number EEPROM location
+    SERIAL_LEN = 16
+
+    try:
+        pkt = [CX_RID_OUT, CX_CMD_EEPROM_READ, SERIAL_LEN,
+               (SERIAL_ADDR >> 8) & 0xFF, SERIAL_ADDR & 0xFF] + [0x00] * 32
+        h.write(pkt)
+        resp = h.read(64, timeout_ms=2000)
+        if resp and len(resp) > SERIAL_LEN:
+            raw = bytes(resp[1:1 + SERIAL_LEN])
+            # Serial is ASCII, null-terminated
+            serial = raw.split(b'\x00')[0].decode('ascii', errors='ignore').strip()
+            if serial and len(serial) >= 4:
+                return serial
+    except Exception:
+        pass
+    return ""
+
+
 def try_read_device_info(dev: PolyDevice) -> bool:
-    """Attempt to read extended device info (firmware version, etc.) via HID."""
+    """Attempt to read extended device info (firmware version, serial) via HID."""
     if hid is None or not dev.path:
         return False
 
-    # If we already have firmware from release_number, skip
-    if dev.release_number > 0:
+    # If we already have firmware from release_number and a serial, skip
+    if dev.release_number > 0 and dev.serial:
         return True
 
     h = _open_hid(dev.path)
@@ -617,6 +677,16 @@ def try_read_device_info(dev: PolyDevice) -> bool:
         return False
 
     try:
+        # Try CX2070x EEPROM serial read (Blackwire 3220 on FFA0 usage page)
+        if not dev.serial and dev.usage_page == 0xFFA0:
+            serial = _try_cx2070x_serial(h)
+            if serial:
+                dev.serial = serial
+
+        # If we already have firmware from release_number, done
+        if dev.release_number > 0:
+            return True
+
         # Try feature reports that commonly contain firmware version info
         for report_id in [1, 2, 5, 6, 9, 10, 15]:
             try:
@@ -1681,7 +1751,7 @@ class FirmwareUpdater:
         current = fw_info.get("current", dev.firmware_display)
         latest = fw_info.get("latest", "unknown")
 
-        if current == latest and not force:
+        if _normalize_version(current) == _normalize_version(latest) and not force:
             out.success(f"  Already up to date (v{current})")
             return True
 
@@ -1813,6 +1883,14 @@ class FirmwareUpdater:
         (BREncoder.cpp, BRControl.cpp). Supports devices that use the BladeRunner
         file transfer protocol over USB HID.
         """
+        # CX2070x EEPROM flash (Blackwire 3220)
+        if dev.dfu_executor == "CxEepromDfu":
+            return self._apply_via_cx_eeprom(dev, fw_path, version)
+
+        # FWU API flash (Savi 8220 DECT)
+        if dev.dfu_executor == "LegacyDfu":
+            return self._apply_via_fwu_api(dev, fw_path, version)
+
         transport_info = DFU_TRANSPORT_INFO.get(dev.dfu_executor)
         experimental_hid = ("HidTiDfu", "SyncDfu", "BrightDfu", "DolphinDfu")
 
@@ -1856,6 +1934,145 @@ class FirmwareUpdater:
         except Exception as e:
             out.error(f"  DFU error: {e}")
             return False
+
+    def _apply_via_cx_eeprom(self, dev: PolyDevice, fw_path: Path, version: str) -> bool:
+        """Flash Blackwire 3220 (CX2070x) via EEPROM over HID.
+
+        The firmware zip contains a .ptc file (S-record format) that maps
+        directly to EEPROM addresses. Uses bw_flash.py's BlackwireFlasher.
+        """
+        import zipfile
+        from bw_flash import BlackwireFlasher, parse_srecords
+
+        # Extract .ptc file from the firmware zip
+        ptc_data = None
+        ptc_name = ""
+        if fw_path.suffix == ".zip":
+            try:
+                with zipfile.ZipFile(fw_path) as z:
+                    for name in z.namelist():
+                        if name.endswith('.ptc'):
+                            ptc_data = z.read(name)
+                            ptc_name = name
+                            break
+            except Exception as e:
+                out.error(f"  Failed to extract firmware: {e}")
+                return False
+        elif fw_path.suffix == ".ptc":
+            ptc_data = fw_path.read_bytes()
+            ptc_name = fw_path.name
+        else:
+            out.error(f"  Unsupported firmware format: {fw_path.suffix}")
+            return False
+
+        if not ptc_data:
+            out.error("  No .ptc file found in firmware package.")
+            return False
+
+        records = parse_srecords(ptc_data)
+        if not records:
+            out.error("  No valid S-records found in firmware file.")
+            return False
+
+        total_bytes = sum(len(d) for _, d in records)
+        out.print(f"  Firmware: {ptc_name} ({len(records)} records, {total_bytes} bytes)")
+        out.warn("  DO NOT disconnect the device during the update!")
+
+        flasher = BlackwireFlasher()
+        info = flasher.find_device()
+        if not info:
+            out.error("  Blackwire 3220 not found on HID bus.")
+            return False
+
+        flasher.open(info)
+        try:
+            ok = flasher.flash(records)
+            if ok:
+                out.success(f"  Firmware update to v{version} complete!")
+                return True
+            else:
+                out.error("  Flash completed with verification errors.")
+                return False
+        except KeyboardInterrupt:
+            out.warn("\n  Update interrupted! EEPROM may be partially written.")
+            out.print("  The device should still boot — re-run the update to complete.")
+            return False
+        except Exception as e:
+            out.error(f"  Flash error: {e}")
+            return False
+        finally:
+            flasher.close()
+
+    def _apply_via_fwu_api(self, dev: PolyDevice, fw_path: Path, version: str) -> bool:
+        """Flash Savi 8220 (and other DECT devices) via FWU API over HID.
+
+        Uses fwu_flash.py's FwuFlasher — fully reverse-engineered CVM API
+        protocol with LE 16-bit primitive IDs over 0xFFA2 usage page.
+        Requires pyusb for USB reset before flashing.
+        """
+        import zipfile
+        from fwu_flash import FwuFlasher, FwuFile, usb_reset
+
+        # Extract .fwu file from the firmware zip
+        fwu_data = None
+        fwu_name = ""
+        if fw_path.suffix == ".zip":
+            try:
+                with zipfile.ZipFile(fw_path) as z:
+                    for name in z.namelist():
+                        if name.endswith('.fwu'):
+                            fwu_data = z.read(name)
+                            fwu_name = name
+                            break
+            except Exception as e:
+                out.error(f"  Failed to extract firmware: {e}")
+                return False
+        elif fw_path.suffix == ".fwu":
+            fwu_data = fw_path.read_bytes()
+            fwu_name = fw_path.name
+        else:
+            out.error(f"  Unsupported firmware format: {fw_path.suffix}")
+            return False
+
+        if not fwu_data:
+            out.error("  No .fwu file found in firmware package.")
+            return False
+
+        try:
+            fwu = FwuFile(fwu_data)
+        except ValueError as e:
+            out.error(f"  Invalid FWU file: {e}")
+            return False
+
+        out.print(f"  Firmware: {fwu_name}")
+        out.print(f"  Device ID: 0x{fwu.device_id:08X}")
+        out.print(f"  Flash range: 0x{fwu.range_start:X}..0x{fwu.range_start+fwu.range_size:X} "
+                   f"({fwu.range_size} bytes)")
+        out.warn("  DO NOT disconnect the device during the update!")
+
+        # USB reset is required on macOS to get exclusive HID access
+        out.print("  USB reset...")
+        usb_reset()
+
+        flasher = FwuFlasher()
+        info = flasher.find_device()
+        if not info:
+            out.error("  Savi 8220 not found on HID bus after USB reset.")
+            return False
+
+        flasher.open(info)
+        try:
+            flasher.flash(fwu)
+            out.success(f"  Firmware update to v{version} complete!")
+            return True
+        except KeyboardInterrupt:
+            out.warn("\n  Update interrupted! Device may need recovery.")
+            return False
+        except Exception as e:
+            out.error(f"  FWU flash error: {e}")
+            return False
+        finally:
+            flasher.close()
 
 
 # ── CLI Commands ─────────────────────────────────────────────────────────────
@@ -2038,11 +2255,8 @@ def cmd_updates(args):
                 out.warn(f"  Firmware download is blocked for this product.")
                 continue
 
-            # Compare base version — cloud may return multi-component "3861.3039.100"
-            # but bcdDevice only gives us the base (first) component
-            current_base = current.split(".")[0]
-            latest_base = latest.split(".")[0]
-            if current_base != latest_base:
+            # Compare normalized versions — cloud returns "0225_0_0", device shows "2.25"
+            if _normalize_version(current) != _normalize_version(latest):
                 out.print(f"  [bold yellow]Update available![/]  v{current} -> v{latest}" if HAS_RICH
                           else f"  Update available!  v{current} -> v{latest}")
                 if fw_info.get("release_notes"):

@@ -671,11 +671,12 @@ def main():
     if args.dry_run:
         print("\n*** DRY RUN — will not send firmware data ***\n")
 
-    # Kill Poly Lens
+    # Kill Poly Lens (all processes)
     if not args.no_kill:
         print("\nKilling Poly Lens...")
-        for proc in ["legacyhost", "LensService", "PolyLauncher"]:
-            subprocess.run(["pkill", "-f", proc], capture_output=True)
+        for proc in ["legacyhost", "LensService", "PolyLauncher",
+                      "Poly Studio", "CallControlApp"]:
+            subprocess.run(["pkill", "-9", "-f", proc], capture_output=True)
         time.sleep(2)
 
     # USB reset for clean state

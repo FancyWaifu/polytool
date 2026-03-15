@@ -77,6 +77,22 @@ POLY_LAUNCH_AGENTS_ALL = [
 # Vendor-specific HID usage pages used by Poly devices
 VENDOR_USAGE_PAGES = {0xFFA0, 0xFFA2, 0xFF52, 0xFF58}
 
+# ── PID Spoofing ────────────────────────────────────────────────────────────
+# Map unsupported PIDs to already-whitelisted equivalents so Poly Studio
+# accepts them without needing to patch PolyDolphin.dylib or Devices.config.
+# The spoofed PID must use the same chipset/handler family as the real device.
+#
+# Format: real_pid → (spoofed_pid, description)
+PID_SPOOF_MAP = {
+    # Blackwire 3220 (CX2070x) → Yeti (CX2070x, same YetiEvent/YetiCommand handlers)
+    0xC056: (0xAB01, "Blackwire 3220 → Yeti"),
+}
+
+def _spoof_pid(pid):
+    """Return the spoofed PID if this device needs spoofing, else the original."""
+    entry = PID_SPOOF_MAP.get(pid)
+    return entry[0] if entry else pid
+
 # CX2070x HID protocol constants (from bw_flash.py)
 CX_RID_OUT = 0x04
 CX_RID_IN = 0x05
@@ -653,7 +669,14 @@ class LegacyProxy:
             device_id = str(abs(int(hashlib.md5(
                 f"{vid:04X}{pid:04X}".encode()).hexdigest()[:16], 16)))
 
-        print(f"  [bridge] Synthesizing ATTACH for {name} (VID 0x{vid:04X} PID 0x{pid:04X})")
+        # Spoof PID if needed
+        spoofed_pid = _spoof_pid(pid)
+        if spoofed_pid != pid:
+            spoof_desc = PID_SPOOF_MAP[pid][1]
+            print(f"  [bridge] Synthesizing ATTACH for {name} "
+                  f"(VID 0x{vid:04X} PID 0x{pid:04X} → spoofed 0x{spoofed_pid:04X}, {spoof_desc})")
+        else:
+            print(f"  [bridge] Synthesizing ATTACH for {name} (VID 0x{vid:04X} PID 0x{pid:04X})")
 
         # Build an ATTACH message with the info from bricked_dev,
         # handle_attach will fill in missing fw/serial from HID
@@ -662,6 +685,7 @@ class LegacyProxy:
             "device": {
                 **bricked_dev,
                 "device_id": device_id,
+                "product_id": str(spoofed_pid),
                 "is_bricked": False,
             },
         }
@@ -719,10 +743,19 @@ class LegacyProxy:
         if not serial:
             serial = f"POLY-{pid:04X}"
 
-        # Track this device
+        # Spoof PID if this device isn't in Poly Studio's allowlist
+        spoofed_pid = _spoof_pid(pid)
+        if spoofed_pid != pid:
+            spoof_desc = PID_SPOOF_MAP[pid][1]
+            print(f"  [bridge] PID spoof: 0x{pid:04X} → 0x{spoofed_pid:04X} ({spoof_desc})")
+            dev["product_id"] = str(spoofed_pid)
+            changed = True
+
+        # Track this device (store real PID for HID access)
         self.tracked_devices[device_id] = {
             "vid": vid,
-            "pid": pid,
+            "pid": pid,  # real PID — needed for HID reads
+            "spoofed_pid": spoofed_pid,
             "name": name,
             "firmware_version": fw_version,
             "serial": serial,
@@ -730,7 +763,6 @@ class LegacyProxy:
         }
 
         # Update the ATTACH message
-        changed = False
         if dev.get("firmware_version") != fw_version:
             dev["firmware_version"] = fw_version
             changed = True
@@ -1173,38 +1205,61 @@ def main():
         subprocess.run(["pkill", "-f", "legacyhost"], capture_output=True)
         return
 
-    # Must run as root to rename legacyhost inside the app bundle
+    # Must run as root to kill processes reliably
     if os.geteuid() != 0:
         print("This tool needs root access. Re-running with sudo...")
         os.execvp("sudo", ["sudo", sys.executable] + sys.argv)
 
     lh_bin = Path("/Applications/Poly Studio.app/Contents/Helpers/"
                    "LegacyHostApp.app/Contents/MacOS/legacyhost")
-    lh_disabled = lh_bin.with_name("legacyhost.bridge_disabled")
 
-    if not lh_bin.exists() and not lh_disabled.exists():
-        print(f"Error: legacyhost not found")
+    if not lh_bin.exists():
+        print(f"Error: legacyhost not found at {lh_bin}")
+        print("  Is Poly Studio installed?")
         sys.exit(1)
 
     proxy = LegacyProxy()
     lh_proc = None
+    # (legacyhost LaunchAgent managed via launchctl)
 
-    def restore_legacyhost():
-        """Restore legacyhost binary if we renamed it."""
-        if lh_disabled.exists() and not lh_bin.exists():
-            try:
-                os.rename(str(lh_disabled), str(lh_bin))
-            except OSError:
-                subprocess.run(["sudo", "mv", str(lh_disabled), str(lh_bin)])
+    # Get the real user's UID for launchctl (we're running as root via sudo)
+    _sudo_user = os.environ.get("SUDO_USER", "")
+    _sudo_uid = ""
+    if _sudo_user:
+        import pwd
+        try:
+            _sudo_uid = str(pwd.getpwnam(_sudo_user).pw_uid)
+        except KeyError:
+            pass
+
+    def _unload_legacyhost_agent():
+        """Unload the LegacyHostApp LaunchAgent so launchd stops respawning it.
+        Do NOT unload LensControlService — that kills Clockwork."""
+        plist = "/Library/LaunchAgents/com.poly.LegacyHostApp.plist"
+        if _sudo_uid:
+            subprocess.run(
+                ["launchctl", "bootout", f"gui/{_sudo_uid}", plist],
+                capture_output=True)
+        # Also kill any running PolyLauncher/legacyhost
+        subprocess.run(["pkill", "-9", "-f", "legacyhost"], capture_output=True)
+        subprocess.run(["pkill", "-9", "-f", "PolyLauncher"], capture_output=True)
+
+    def _reload_legacyhost_agent():
+        """Reload the LegacyHostApp LaunchAgent on shutdown."""
+        plist = "/Library/LaunchAgents/com.poly.LegacyHostApp.plist"
+        if _sudo_uid:
+            subprocess.run(
+                ["launchctl", "bootstrap", f"gui/{_sudo_uid}", plist],
+                capture_output=True)
 
     def shutdown(signum=None, frame=None):
         print("\nShutting down...")
         proxy.close()
-        restore_legacyhost()
         PID_FILE.unlink(missing_ok=True)
         if lh_proc:
             lh_proc.terminate()
         subprocess.run(["pkill", "-f", "legacyhost"], capture_output=True)
+        _reload_legacyhost_agent()
         print("Stopped. Restart Poly Studio to restore normal operation.")
         sys.exit(0)
 
@@ -1214,23 +1269,17 @@ def main():
     PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     PID_FILE.write_text(str(os.getpid()))
 
-    # Step 1: Kill everything and disable legacyhost
-    print("Step 1: Stopping Poly Studio & disabling legacyhost...")
+    # Step 1: Kill everything and disable legacyhost LaunchAgent
+    print("Step 1: Stopping Poly Studio...")
     for proc in ["Poly Studio", "LensService", "legacyhost", "PolyLauncher",
                   "CallControlApp"]:
         subprocess.run(["pkill", "-9", "-f", proc], capture_output=True)
     time.sleep(2)
 
-    # Temporarily rename legacyhost so PolyLauncher can't start it
-    if lh_bin.exists():
-        try:
-            os.rename(str(lh_bin), str(lh_disabled))
-        except OSError:
-            subprocess.run(["sudo", "mv", str(lh_bin), str(lh_disabled)])
-        if not lh_disabled.exists():
-            print("Error: Could not disable legacyhost (need sudo?)")
-            sys.exit(1)
-    print("  legacyhost disabled.")
+    # Unload the LaunchAgent so launchd stops respawning legacyhost.
+    # Do NOT unload LensControlService — we need Clockwork alive.
+    _unload_legacyhost_agent()
+    print("  Poly Studio stopped (LegacyHostApp agent unloaded).")
 
     # Clean up stale sockets
     if SOCKET_PATH.exists():
@@ -1244,12 +1293,12 @@ def main():
     proxy.discover_hid_devices()
     if not proxy.hid_devices:
         print("No Poly devices found on HID bus.")
-        restore_legacyhost()
+        _reload_legacyhost_agent()
         PID_FILE.unlink(missing_ok=True)
         sys.exit(1)
 
-    # Step 3: Start Poly Studio (legacyhost won't start since it's disabled)
-    print("Step 3: Starting Poly Studio (legacyhost disabled)...")
+    # Step 3: Start Poly Studio (legacyhost gets killed by our killer thread)
+    print("Step 3: Starting Poly Studio...")
     subprocess.Popen(
         ["open", "/Applications/Poly Studio.app"],
         stdout=subprocess.DEVNULL,
@@ -1267,7 +1316,7 @@ def main():
 
     if not socket_found:
         print("Error: Clockwork socket never appeared.")
-        restore_legacyhost()
+        _reload_legacyhost_agent()
         PID_FILE.unlink(missing_ok=True)
         sys.exit(1)
     print(f"  Socket appeared at {SOCKET_PATH}")
@@ -1287,7 +1336,7 @@ def main():
                 time.sleep(0.5)
     else:
         print("Error: Could not connect to Clockwork socket.")
-        restore_legacyhost()
+        _reload_legacyhost_agent()
         PID_FILE.unlink(missing_ok=True)
         sys.exit(1)
 
@@ -1298,7 +1347,7 @@ def main():
     if not init_msg:
         print("  ERROR: No INIT received from Clockwork.")
         proxy.close()
-        restore_legacyhost()
+        _reload_legacyhost_agent()
         PID_FILE.unlink(missing_ok=True)
         sys.exit(1)
 
@@ -1312,11 +1361,8 @@ def main():
     print("  Handshake complete!")
     proxy.clockwork_sock.setblocking(False)
 
-    # Step 6: Restore legacyhost binary
-    print("Step 6: Restoring legacyhost binary...")
-    restore_legacyhost()
-    if not lh_bin.exists():
-        print("  Warning: Could not restore legacyhost")
+    # Step 6: Ready to start legacyhost
+    print("Step 6: Preparing legacyhost...")
 
     # Step 7: Create our listener at the Clockwork socket path
     # Delete the original socket (Clockwork already accepted us, the listener
@@ -1345,12 +1391,7 @@ def main():
         PID_FILE.unlink(missing_ok=True)
         sys.exit(1)
 
-    # Re-disable the binary so PolyLauncher can't respawn it behind our back
-    if lh_bin.exists() and not lh_disabled.exists():
-        try:
-            os.rename(str(lh_bin), str(lh_disabled))
-        except OSError:
-            pass
+    # LaunchAgent is still unloaded — PolyLauncher can't respawn legacyhost
 
     # Forward the real INIT to legacyhost
     proxy.send_json(proxy.legacy_sock, init_msg)
@@ -1367,7 +1408,7 @@ def main():
         traceback.print_exc()
     finally:
         proxy.close()
-        restore_legacyhost()
+        _reload_legacyhost_agent()
         PID_FILE.unlink(missing_ok=True)
         if lh_proc:
             lh_proc.terminate()
