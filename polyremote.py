@@ -442,24 +442,63 @@ def cmd_batch(args):
 
 
 def cmd_settings(args):
-    """List all available setting names and types."""
-    if args.json:
-        output_json({"settings": SETTINGS_DB})
-    else:
-        print(f"\n  Available Settings ({len(SETTINGS_DB)}):\n")
-        for s in SETTINGS_DB:
-            families = ", ".join(s["families"])
-            if s["type"] == "range":
-                detail = f"range {s.get('min', 0)}-{s.get('max', 10)}"
-            elif s["type"] == "bool":
-                detail = "true/false"
-            elif s["type"] == "choice":
-                detail = " | ".join(s.get("choices", [])[:4])
-                if len(s.get("choices", [])) > 4:
-                    detail += " | ..."
+    """List available settings. Shows per-device when devices are connected."""
+    devices = discover_devices()
+    if args.pid:
+        pid_val = int(args.pid, 16) if args.pid.startswith("0x") else int(args.pid)
+        devices = [d for d in devices if d["pid"] == pid_val]
+
+    if devices:
+        # Show settings per connected device
+        all_results = []
+        for dev in devices:
+            supported = get_settings_for_device(dev["usage_page"], dev["dfu_executor"])
+            if args.json:
+                all_results.append({
+                    "device": dev["friendly_name"],
+                    "pid": dev["pid_hex"],
+                    "family": dev["family"],
+                    "settings": supported,
+                })
             else:
-                detail = s["type"]
-            print(f"    {s['name']:<30} {detail:<30} [{families}]")
+                print(f"\n  {dev['friendly_name']} ({dev['pid_hex']}) — {dev['family']}")
+                print(f"  {'─' * 50}")
+                if not supported:
+                    print(f"    No configurable settings for this device family")
+                for s in supported:
+                    if s["type"] == "range":
+                        detail = f"range {s.get('min', 0)}-{s.get('max', 10)}"
+                    elif s["type"] == "bool":
+                        detail = "true / false"
+                    elif s["type"] == "choice":
+                        detail = " | ".join(s.get("choices", [])[:4])
+                        if len(s.get("choices", [])) > 4:
+                            detail += " | ..."
+                    else:
+                        detail = s["type"]
+                    print(f"    {s['name']:<30} {detail}")
+        if args.json:
+            output_json({"devices": all_results})
+    else:
+        # No devices — show full settings database
+        if args.json:
+            output_json({"settings": SETTINGS_DB})
+        else:
+            print(f"\n  All Settings ({len(SETTINGS_DB)}):")
+            print(f"  (No devices connected — showing all families)\n")
+            for s in SETTINGS_DB:
+                families = ", ".join(s["families"])
+                if s["type"] == "range":
+                    detail = f"range {s.get('min', 0)}-{s.get('max', 10)}"
+                elif s["type"] == "bool":
+                    detail = "true / false"
+                elif s["type"] == "choice":
+                    detail = " | ".join(s.get("choices", [])[:4])
+                    if len(s.get("choices", [])) > 4:
+                        detail += " | ..."
+                else:
+                    detail = s["type"]
+                print(f"    {s['name']:<30} {detail:<30} [{families}]")
     return 0
 
 
