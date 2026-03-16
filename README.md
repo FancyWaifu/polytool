@@ -105,9 +105,9 @@ Firmware update files contain generic placeholder values that overwrite device-u
 - `pyusb` — USB reset for Savi flash (macOS)
 - `rich` — Terminal formatting (optional)
 
-## PolyRemote — Enterprise Remote Configuration
+## PolyRemote
 
-Standalone CLI tool for managed environments. Changes headset settings without touching firmware or the Poly Lens client. Designed for deployment via RMM tools (SCCM, Intune, Jamf).
+Standalone CLI tool for changing headset settings. Does not modify firmware or the Poly Lens client.
 
 **Coexists with Poly Lens** — does not kill, modify, or interfere with the managed client.
 
