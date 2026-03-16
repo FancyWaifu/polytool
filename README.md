@@ -105,6 +105,48 @@ Firmware update files contain generic placeholder values that overwrite device-u
 - `pyusb` — USB reset for Savi flash (macOS)
 - `rich` — Terminal formatting (optional)
 
+## PolyRemote — Enterprise Remote Configuration
+
+Standalone CLI tool for managed environments. Changes headset settings without touching firmware or the Poly Lens client. Designed for deployment via RMM tools (SCCM, Intune, Jamf).
+
+**Coexists with Poly Lens** — does not kill, modify, or interfere with the managed client.
+
+```bash
+# List devices
+python3 polyremote.py list
+
+# Change a setting on all connected headsets
+python3 polyremote.py set "Sidetone Level" 5
+
+# Target a specific device model
+python3 polyremote.py set "Ringtone Volume" 8 --pid 0xACFF
+
+# Read current setting
+python3 polyremote.py get "Sidetone Level"
+
+# Dump all settings
+python3 polyremote.py dump
+
+# Apply a preset from file
+python3 polyremote.py batch presets/office_standard.json
+
+# List all available settings
+python3 polyremote.py settings
+```
+
+**JSON output** for automation (auto-enabled when piped):
+```bash
+python3 polyremote.py list --json | jq '.devices[].name'
+python3 polyremote.py dump --json > device_report.json
+```
+
+**Included presets** (`presets/`):
+- `office_standard.json` — Standard office config
+- `call_center.json` — High-volume call center
+- `quiet_mode.json` — Minimal audio feedback
+
+**Audit logging** to `~/.polytool/logs/polyremote.log` — every get/set operation is logged with timestamp, device PID, serial, setting name, and result.
+
 ## How It Works
 
 PolyTool talks directly to headsets over USB HID — the same protocols Poly Lens uses internally. No cloud account, no background services, no auto-launching daemons. Start it when you need it, close it when you don't.

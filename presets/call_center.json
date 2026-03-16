@@ -1,0 +1,18 @@
+{
+    "name": "Call Center",
+    "description": "High-volume call center configuration",
+    "settings": [
+        {"name": "Sidetone On/Off", "value": true},
+        {"name": "Sidetone Level", "value": 5},
+        {"name": "Ringtone Volume", "value": 10},
+        {"name": "Anti-Startle Protection", "value": true},
+        {"name": "Noise Limiting", "value": true},
+        {"name": "G616 Limiting", "value": true},
+        {"name": "HD Voice", "value": true},
+        {"name": "Auto-Answer", "value": true},
+        {"name": "Mute Reminder Tone", "value": true},
+        {"name": "Wearing Sensor On/Off", "value": true},
+        {"name": "Audio Sensing", "value": true},
+        {"name": "Online Indicator", "value": true}
+    ]
+}

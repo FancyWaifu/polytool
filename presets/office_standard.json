@@ -1,0 +1,15 @@
+{
+    "name": "Office Standard",
+    "description": "Standard office headset configuration",
+    "settings": [
+        {"name": "Sidetone On/Off", "value": true},
+        {"name": "Sidetone Level", "value": 3},
+        {"name": "Ringtone Volume", "value": 7},
+        {"name": "Anti-Startle Protection", "value": true},
+        {"name": "Noise Limiting", "value": true},
+        {"name": "G616 Limiting", "value": false},
+        {"name": "HD Voice", "value": true},
+        {"name": "Mute Reminder Tone", "value": true},
+        {"name": "Online Indicator", "value": true}
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "name": "Quiet Mode",
+    "description": "Minimal audio feedback for quiet environments",
+    "settings": [
+        {"name": "Sidetone On/Off", "value": false},
+        {"name": "Sidetone Level", "value": 0},
+        {"name": "Ringtone Volume", "value": 3},
+        {"name": "Mute Reminder Tone", "value": false},
+        {"name": "Online Indicator", "value": false},
+        {"name": "Audio Sensing", "value": false}
+    ]
+}
