@@ -28,6 +28,9 @@ function switchTab(tab) {
     } else if (tab === 'updates') {
         main.innerHTML = '<div class="loading"><div class="spinner"></div> Checking for updates...</div>';
         loadUpdates();
+    } else if (tab === 'settings') {
+        main.innerHTML = '<div class="loading"><div class="spinner"></div> Loading settings...</div>';
+        loadSettings();
     } else if (tab === 'catalog') {
         showCatalog();
     }
@@ -145,7 +148,7 @@ function renderDeviceCard(dev) {
 
 function renderBattery(dev) {
     if (dev.battery_level < 0) {
-        return '<span style="color:var(--text-dim)">n/a</span>';
+        return '<span style="color:var(--text-dim)">—</span>';
     }
 
     const pct = dev.battery_level;
@@ -424,6 +427,236 @@ function renderCatalog(products) {
     html += `<div style="margin-top:12px; color:var(--text-dim); font-size:13px">${products.length} products</div>`;
     results.innerHTML = html;
 }
+
+// ── Firmware Library ────────────────────────────────────────────────────────
+
+async function loadLibrary() {
+    const main = document.querySelector('main');
+    try {
+        const resp = await fetch('/api/firmware/library');
+        const data = await resp.json();
+        renderLibrary(data);
+    } catch (e) {
+        main.innerHTML = '<div class="empty"><h3>Failed to load firmware library</h3></div>';
+    }
+}
+
+function renderLibrary(data) {
+    const main = document.querySelector('main');
+    const pkgs = data.packages || [];
+
+    if (pkgs.length === 0) {
+        main.innerHTML = `
+            <div class="empty">
+                <div class="empty-icon">&#x1F4E6;</div>
+                <h3>No firmware cached</h3>
+                <p>Check the Firmware Updates tab to download firmware</p>
+            </div>`;
+        return;
+    }
+
+    const fmtColors = {
+        'FIRMWARE': '#4f8ff7',
+        'FWU': '#34d399',
+        'CSR-dfu2': '#fb923c',
+        'APPUHDR5': '#a78bfa',
+        'S-record': '#fbbf24',
+    };
+
+    const typeLabels = {
+        'usb': 'Application',
+        'bootloader': 'Bootloader',
+        'hs': 'Headset',
+        'base': 'Base Station',
+        'lang': 'Language Pack',
+        'bt': 'Bluetooth',
+        'pic': 'PIC MCU',
+        'bc05': 'DECT Radio',
+        'bc5': 'DECT Radio',
+        'tuning': 'DSP Tuning',
+        'tuningpackage': 'DSP Tuning',
+        'setid': 'Set ID',
+    };
+
+    let html = `
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px">
+            <div class="section-title">Firmware Library (${pkgs.length} packages, ${data.total_mb} MB)</div>
+        </div>`;
+
+    for (const pkg of pkgs) {
+        const fmtBadges = (pkg.formats || []).map(f => {
+            const color = fmtColors[f] || 'var(--text-dim)';
+            return `<span class="fmt-badge" style="color:${color}; border-color:${color}">${esc(f)}</span>`;
+        }).join(' ');
+
+        html += `
+            <div class="update-card" style="margin-bottom:12px">
+                <div class="update-header">
+                    <div>
+                        <div class="device-name">${esc(pkg.product)}</div>
+                        <div class="version-info" style="margin-top:4px">
+                            v${esc(pkg.version)} &mdash; ${pkg.size_mb} MB
+                        </div>
+                    </div>
+                    <div>${fmtBadges}</div>
+                </div>`;
+
+        if (pkg.components.length > 0) {
+            html += `<div class="comp-grid">`;
+            for (const c of pkg.components) {
+                const typeLabel = typeLabels[c.type] || c.type || '?';
+                html += `
+                    <div class="comp-item">
+                        <span class="comp-type">${esc(typeLabel)}</span>
+                        <span class="comp-desc" title="${esc(c.description)}">${esc(c.description || c.fileName)}</span>
+                        ${c.version ? `<span class="comp-ver">v${esc(c.version)}</span>` : ''}
+                    </div>`;
+            }
+            html += `</div>`;
+        }
+
+        html += `</div>`;
+    }
+
+    main.innerHTML = html;
+}
+
+
+// ── Settings ────────────────────────────────────────────────────────────────
+
+async function loadSettings() {
+    const main = document.querySelector('main');
+
+    // Get devices first
+    let devices;
+    try {
+        const resp = await fetch('/api/devices');
+        const data = await resp.json();
+        devices = data.devices;
+    } catch (e) {
+        main.innerHTML = '<div class="empty"><h3>Failed to load devices</h3></div>';
+        return;
+    }
+
+    if (!devices || devices.length === 0) {
+        main.innerHTML = `
+            <div class="empty">
+                <div class="empty-icon">&#x2699;</div>
+                <h3>No devices connected</h3>
+                <p>Connect a device to manage its settings</p>
+            </div>`;
+        return;
+    }
+
+    let html = '<div class="section-title">Device Settings</div>';
+
+    for (const dev of devices) {
+        html += `
+            <div class="update-card" id="settings-card-${esc(dev.id)}" style="margin-bottom:16px">
+                <div class="update-header">
+                    <div class="device-name">${esc(dev.name)}</div>
+                    <div class="device-category">${esc(dev.category)}</div>
+                </div>
+                <div id="settings-body-${esc(dev.id)}" class="loading" style="margin-top:12px">
+                    <div class="spinner"></div> Reading settings...
+                </div>
+            </div>`;
+    }
+
+    main.innerHTML = html;
+
+    // Load settings for each device
+    for (const dev of devices) {
+        loadDeviceSettings(dev.id);
+    }
+}
+
+async function loadDeviceSettings(devId) {
+    const body = document.getElementById(`settings-body-${devId}`);
+    if (!body) return;
+
+    try {
+        const resp = await fetch(`/api/settings/${devId}`);
+        const data = await resp.json();
+        renderDeviceSettings(devId, data.settings || []);
+    } catch (e) {
+        body.innerHTML = '<span style="color:var(--text-dim)">Could not read settings</span>';
+    }
+}
+
+function renderDeviceSettings(devId, settings) {
+    const body = document.getElementById(`settings-body-${devId}`);
+    if (!body) return;
+
+    if (!settings || settings.length === 0) {
+        body.innerHTML = '<span style="color:var(--text-dim)">No readable settings for this device</span>';
+        return;
+    }
+
+    let html = '<div class="settings-grid">';
+
+    for (const s of settings) {
+        const readOnly = s.read_only || false;
+        html += `<div class="setting-row">`;
+        html += `<div class="setting-label">${esc(s.name)}</div>`;
+
+        if (s.type === 'bool') {
+            const checked = s.value ? 'checked' : '';
+            const disabled = readOnly ? 'disabled' : '';
+            html += `
+                <label class="toggle">
+                    <input type="checkbox" ${checked} ${disabled}
+                           onchange="writeSetting('${esc(devId)}', '${esc(s.name)}', this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>`;
+        } else if (s.type === 'range') {
+            const disabled = readOnly ? 'disabled' : '';
+            html += `
+                <div class="setting-range">
+                    <input type="range" min="${s.min}" max="${s.max}" value="${s.value}" ${disabled}
+                           oninput="this.nextElementSibling.textContent=this.value"
+                           onchange="writeSetting('${esc(devId)}', '${esc(s.name)}', Number(this.value))">
+                    <span class="range-value">${s.value}</span>
+                </div>`;
+        } else if (s.type === 'choice' && s.choices) {
+            const disabled = readOnly ? 'disabled' : '';
+            html += `
+                <select class="setting-select" ${disabled}
+                        onchange="writeSetting('${esc(devId)}', '${esc(s.name)}', this.value)">`;
+            for (const c of s.choices) {
+                const selected = c === s.value ? 'selected' : '';
+                html += `<option value="${esc(c)}" ${selected}>${esc(c)}</option>`;
+            }
+            html += `</select>`;
+        } else {
+            html += `<span class="prop-value" style="color:var(--text-dim)">${esc(String(s.value))}</span>`;
+        }
+
+        html += `</div>`;
+    }
+
+    html += '</div>';
+    body.innerHTML = html;
+}
+
+async function writeSetting(devId, name, value) {
+    try {
+        const resp = await fetch(`/api/settings/${devId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, value}),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            toast(`${name} updated`);
+        } else {
+            toast(`Failed to update ${name}`);
+        }
+    } catch (e) {
+        toast(`Error updating ${name}`);
+    }
+}
+
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

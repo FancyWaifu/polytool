@@ -150,13 +150,23 @@ class BlackwireFlasher:
         return actual == expected
 
     def flash(self, records, verify_only=False):
-        """Flash all PTC records to EEPROM."""
+        """Flash all PTC records to EEPROM.
+
+        Automatically preserves device-unique data (serial number, calibration)
+        that the firmware PTC file would otherwise overwrite with generic values.
+        """
+        from device_identity import backup_device_identity, restore_device_identity
+
         total_bytes = sum(len(d) for _, d in records)
         written = 0
         mismatches = 0
         skipped = 0
 
         if not verify_only:
+            # Back up device-unique regions BEFORE enabling writes
+            print("  Backing up device identity...")
+            identity_backup = backup_device_identity(self.h, "cx2070x")
+
             print("  Enabling EEPROM writes (reg 0x1000 bit 7)...")
             self.enable_eeprom_writes()
 
@@ -219,6 +229,11 @@ class BlackwireFlasher:
         else:
             print(f"\n  Done: {written} bytes in {elapsed:.1f}s, "
                   f"{skipped} skipped (already correct), {mismatches} verify errors")
+
+            # Restore device-unique data that was overwritten by the PTC
+            print("\n  Restoring device identity...")
+            restore_device_identity(self.h, "cx2070x", identity_backup)
+            print("  Device identity restored.")
 
         return mismatches == 0
 

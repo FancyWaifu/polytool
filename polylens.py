@@ -153,7 +153,7 @@ def api_updates():
             "update_available": False,
         }
         if fw_info:
-            current = fw_info.get("current", dev.firmware_display)
+            current = dev.firmware_display  # Always use actual device firmware
             latest = fw_info.get("latest", "unknown")
             entry["current"] = current
             entry["latest"] = latest
@@ -165,6 +165,107 @@ def api_updates():
             entry["blocked"] = fw_info.get("blocked_download", False)
         results.append(entry)
     return jsonify({"updates": results})
+
+
+@app.route("/api/settings/<dev_id>")
+def api_settings_read(dev_id):
+    """Read all settings for a device."""
+    from device_settings import read_all_settings
+    dev = _find_device_by_id(dev_id)
+    if not dev:
+        return jsonify({"error": "Device not found"}), 404
+
+    settings = read_all_settings(dev.path, dev.usage_page, dev.dfu_executor)
+    return jsonify({"device_id": dev_id, "settings": settings})
+
+
+@app.route("/api/settings/<dev_id>", methods=["POST"])
+def api_settings_write(dev_id):
+    """Write a setting to a device."""
+    from device_settings import write_setting
+    dev = _find_device_by_id(dev_id)
+    if not dev:
+        return jsonify({"error": "Device not found"}), 404
+
+    data = request.get_json() or {}
+    name = data.get("name", "")
+    value = data.get("value")
+
+    if not name:
+        return jsonify({"error": "Setting name required"}), 400
+
+    success = write_setting(dev.path, dev.usage_page, dev.dfu_executor, name, value)
+    return jsonify({"success": success, "name": name, "value": value})
+
+
+@app.route("/api/firmware/library")
+def api_firmware_library():
+    """List all cached firmware packages with component details."""
+    import zipfile
+    packages = []
+    cache = FIRMWARE_CACHE
+    if not cache.exists():
+        return jsonify({"packages": [], "count": 0})
+
+    for zp in sorted(cache.glob("*.zip")):
+        pkg = {
+            "filename": zp.name,
+            "size_mb": round(zp.stat().st_size / 1024 / 1024, 1),
+            "components": [],
+            "version": "",
+            "product": "",
+            "formats": [],
+        }
+        try:
+            with zipfile.ZipFile(zp) as z:
+                # Parse rules.json
+                for name in z.namelist():
+                    if name.endswith('rules.json'):
+                        rules = json.loads(z.read(name))
+                        pkg["version"] = rules.get("version", "")
+                        for comp in rules.get("components", []):
+                            c = {
+                                "description": comp.get("description", ""),
+                                "version": comp.get("version", ""),
+                                "type": comp.get("type", comp.get("fileFormat", "")),
+                                "fileName": comp.get("fileName", ""),
+                            }
+                            pkg["components"].append(c)
+                        break
+
+                # Detect formats from magic bytes
+                fmt_set = set()
+                for name in z.namelist():
+                    if name.endswith(('.bin', '.dfu', '.fwu', '.ptc')):
+                        data = z.read(name)[:8]
+                        if data[:8] == b'FIRMWARE':
+                            fmt_set.add("FIRMWARE")
+                        elif data[:8] == b'CSR-dfu2':
+                            fmt_set.add("CSR-dfu2")
+                        elif data[:8] == b'APPUHDR5':
+                            fmt_set.add("APPUHDR5")
+                        elif data[:3] == b'FWU':
+                            fmt_set.add("FWU")
+                        elif data[:2] == b'S3':
+                            fmt_set.add("S-record")
+                pkg["formats"] = sorted(fmt_set)
+
+                # Derive product name from filename
+                name = zp.stem.upper()
+                for prefix in ["BLACKWIRE", "BW", "SAVI", "SYNC", "STUDIO", "LEGEND",
+                               "P53", "P99"]:
+                    if prefix in name:
+                        pkg["product"] = zp.stem.split("_")[0].replace("-", " ")
+                        break
+                if not pkg["product"]:
+                    pkg["product"] = zp.stem.split("_")[0]
+
+        except Exception:
+            pass
+        packages.append(pkg)
+
+    return jsonify({"packages": packages, "count": len(packages),
+                    "total_mb": round(sum(p["size_mb"] for p in packages), 1)})
 
 
 @app.route("/api/catalog")
@@ -235,7 +336,7 @@ def _run_update(dev_id, force=False):
             set_status("error", 10, "No firmware info available", "Not in cloud catalog")
             return
 
-        current = fw_info.get("current", dev.firmware_display)
+        current = dev.firmware_display  # Always use actual device firmware
         latest = fw_info.get("latest", "unknown")
 
         if _normalize_version(current) == _normalize_version(latest) and not force:
@@ -266,12 +367,10 @@ def _run_update(dev_id, force=False):
             set_status("done", 100, f"Updated to v{latest}! Device is rebooting.")
         else:
             transport = DFU_TRANSPORT_INFO.get(dev.dfu_executor)
-            if dev.dfu_executor == "LegacyDfu":
-                msg = "FWU API protocol not yet supported for cross-platform flashing"
-            elif dev.dfu_executor == "btNeoDfu":
+            if dev.dfu_executor == "btNeoDfu":
                 msg = "Bluetooth DFU requires Windows with Poly Lens Desktop"
             elif transport:
-                msg = f"Flashing via {transport[0]} failed"
+                msg = f"Flashing via {transport[0]} failed — check terminal for details"
             else:
                 msg = "Flashing not supported for this device on this platform"
             set_status("error", 60, "Flash failed", msg)

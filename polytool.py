@@ -195,10 +195,18 @@ DFU_EXECUTOR_MAP = {
     "4317": "HidTiDfu", "4315": "HidTiDfu", "c053": "HidTiDfu",
     "c054": "HidTiDfu", "430b": "HidTiDfu", "430d": "HidTiDfu",
     "430a": "HidTiDfu", "430c": "HidTiDfu",
+    # EncorePro USB series (same TI chipset)
+    "430e": "HidTiDfu", "430f": "HidTiDfu",  # EncorePro 320/310 USB
+    "431d": "HidTiDfu", "431e": "HidTiDfu", "431f": "HidTiDfu",  # EncorePro 515/525/545
+    # DA adapters (TI chipset)
+    "431b": "HidTiDfu", "431c": "HidTiDfu",  # DA75, DA85
+    # Dell variants (same TI chipset)
+    "a513": "HidTiDfu",  # Dell Pro Stereo WH3022
     # SyncDfu - Sync speakerphones (BladeRunner FTP over USB HID)
     "15c": "SyncDfu", "163": "SyncDfu", "16d": "SyncDfu",
     # StudioDfu - Studio video bars
     "9217": "StudioDfu", "9290": "StudioDfu", "92b2": "StudioDfu",
+    "431a": "HidTiDfu",  # Poly Studio P21
     # LegacyDfu - DECT devices (FwuApiDFU via named pipe to PLTDeviceManager)
     # Savi 8200 series
     "acff": "LegacyDfu", "acfe": "LegacyDfu",  # W8220T, W8210T
@@ -210,10 +218,16 @@ DFU_EXECUTOR_MAP = {
     "ac27": "LegacyDfu", "ac28": "LegacyDfu",
     "ac34": "LegacyDfu", "ac35": "LegacyDfu",
     "ac37": "LegacyDfu", "ac38": "LegacyDfu",
+    # Savi 8200 base variants
+    "ac22": "LegacyDfu", "ac2b": "LegacyDfu",  # Savi 8200 alt bases
+    "ac21": "LegacyDfu", "ac2a": "LegacyDfu",  # Savi Office Base CDM
     # Other LegacyDfu devices
     "411": "LegacyDfu",   # Hydra / Savi 7x0
     "412": "LegacyDfu",
     "ac01": "LegacyDfu", "ac11": "LegacyDfu",  # Poseidon / Savi 7200
+    # Savi USB dongles (headset-side, FWU protocol)
+    "ab06": "LegacyDfu", "ab07": "LegacyDfu",  # Savi 7310/7320 dongles
+    "ab09": "LegacyDfu", "ab0a": "LegacyDfu",  # Savi 8210/8220 dongles
     # Voyager Focus UC (CSR-dfu2 via btNeoDfu)
     "127": "btNeoDfu",
     # Voyager Legend (USB DFU class protocol)
@@ -1892,16 +1906,12 @@ class FirmwareUpdater:
             return self._apply_via_fwu_api(dev, fw_path, version)
 
         transport_info = DFU_TRANSPORT_INFO.get(dev.dfu_executor)
-        experimental_hid = ("HidTiDfu", "SyncDfu", "BrightDfu", "DolphinDfu")
+        experimental_hid = ("HidTiDfu", "SyncDfu", "StudioDfu", "BrightDfu", "DolphinDfu")
 
         if dev.dfu_executor not in experimental_hid:
             executor = dev.dfu_executor or "unknown"
             out.warn(f"  Cannot flash this device on {platform.system()}.")
-            if executor == "LegacyDfu":
-                out.print("  This device uses the FWU API (0x4Fxx) protocol, which requires")
-                out.print("  Poly Lens Desktop + PLTDeviceManager on Windows.")
-                out.print("  The wire protocol for FWU over HID is not yet reverse-engineered.")
-            elif executor == "btNeoDfu":
+            if executor == "btNeoDfu":
                 out.print("  This device uses BladeRunner FTP over Bluetooth, which requires")
                 out.print("  the btNeoDfu executor on Windows.")
             elif executor == "usbdfu":
@@ -1912,6 +1922,12 @@ class FirmwareUpdater:
                 out.print(f"  Protocol: {transport_info[0]}, Format: {transport_info[1]}")
             out.print(f"\n  Firmware file saved at: {fw_path}")
             out.print("  To flash: connect to a Windows PC with Poly Lens Desktop installed.")
+            return False
+
+        # Extract the correct firmware binary from the zip
+        # rules.json tells us which file is the main application firmware
+        actual_fw_path = self._extract_bladerunner_fw(dev, fw_path)
+        if not actual_fw_path:
             return False
 
         out.warn("  HID DFU is EXPERIMENTAL — reverse-engineered BladeRunner protocol.")
@@ -1926,7 +1942,7 @@ class FirmwareUpdater:
 
         try:
             dfu = BladeRunnerDFU(dev)
-            return dfu.flash_firmware(fw_path, version)
+            return dfu.flash_firmware(actual_fw_path, version)
         except KeyboardInterrupt:
             out.warn("\n  Update interrupted! Device may need manual recovery.")
             out.print("  Try power cycling the device. If unresponsive, use Poly Lens Recovery.")
@@ -1934,6 +1950,102 @@ class FirmwareUpdater:
         except Exception as e:
             out.error(f"  DFU error: {e}")
             return False
+
+    def _extract_bladerunner_fw(self, dev: PolyDevice, fw_path: Path) -> Optional[Path]:
+        """Extract the main firmware binary from a zip for BladeRunner DFU.
+
+        Reads rules.json to find the component with type 'usb' (application firmware),
+        extracts it to a temp file, and returns the path.
+        For non-zip files, returns the path directly.
+        """
+        if fw_path.suffix != ".zip":
+            return fw_path
+
+        import zipfile, tempfile
+
+        try:
+            with zipfile.ZipFile(fw_path) as z:
+                names = z.namelist()
+
+                # Try rules.json first to find the right component
+                target_file = None
+                for name in names:
+                    if name.endswith('rules.json'):
+                        try:
+                            rules = json.loads(z.read(name))
+                            for comp in rules.get("components", []):
+                                comp_type = comp.get("type", "")
+                                fn = comp.get("fileName", "")
+                                # Main firmware is type "usb" or "bt"
+                                if comp_type in ("usb", "bt") and fn:
+                                    # For HidTiDfu: prefer fw.bin or dfu_image.bin
+                                    if fn in names:
+                                        target_file = fn
+                                        break
+                        except Exception:
+                            pass
+                        break
+
+                # Fallback: find by filename pattern
+                if not target_file:
+                    for name in names:
+                        low = name.lower()
+                        # Main firmware files by naming convention
+                        if low in ('fw.bin', 'dfu_image.bin'):
+                            target_file = name
+                            break
+                        if '_dfu_image' in low and low.endswith('.bin'):
+                            target_file = name
+                            break
+                        if low.endswith('.bin') and 'firmware' in low:
+                            target_file = name
+                            break
+
+                # Last fallback: any FIRMWARE-magic .bin file
+                if not target_file:
+                    for name in names:
+                        if name.endswith('.bin'):
+                            data = z.read(name)[:8]
+                            if data == b'FIRMWARE':
+                                target_file = name
+                                break
+                        elif name.endswith('.dfu'):
+                            data = z.read(name)[:8]
+                            if data == b'CSR-dfu2':
+                                target_file = name
+                                break
+
+                # For APPUHDR5 (Sync 20): find the bt component
+                if not target_file:
+                    for name in names:
+                        if name.endswith('.bin'):
+                            data = z.read(name)[:8]
+                            if data == b'APPUHDR5':
+                                target_file = name
+                                break
+
+                if not target_file:
+                    # Check for nested zip (Studio devices use .zip.dfu)
+                    for name in names:
+                        if name.endswith('.zip.dfu') or name.endswith('.zip'):
+                            out.error(f"  This firmware uses OTA packaging ({name})")
+                            out.print(f"  Studio OTA updates are not yet supported via HID DFU.")
+                            return None
+                    out.error(f"  No flashable firmware found in {fw_path.name}")
+                    out.print(f"  Files: {', '.join(names[:10])}")
+                    return None
+
+                # Extract to temp file
+                fw_data = z.read(target_file)
+                tmp = Path(tempfile.mktemp(suffix=Path(target_file).suffix,
+                                            prefix="polytool_fw_"))
+                tmp.write_bytes(fw_data)
+                out.print(f"  Extracted: {target_file} ({len(fw_data)} bytes)")
+                return tmp
+
+        except Exception as e:
+            out.error(f"  Failed to extract firmware: {e}")
+            return None
 
     def _apply_via_cx_eeprom(self, dev: PolyDevice, fw_path: Path, version: str) -> bool:
         """Flash Blackwire 3220 (CX2070x) via EEPROM over HID.
