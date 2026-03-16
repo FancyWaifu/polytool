@@ -97,12 +97,6 @@ def run_polytool(*args):
     subprocess.run(cmd)
 
 
-def run_bridge(*args):
-    """Run poly_bridge.py (needs sudo)."""
-    cmd = [sys.executable, str(TOOL_DIR / "poly_bridge.py")] + list(args)
-    subprocess.run(cmd)
-
-
 def run_probe(*args):
     """Run the FWU probe interactively."""
     cmd = [sys.executable, "-m", "probes.fwu_probe"] + list(args)
@@ -212,42 +206,6 @@ def menu_firmware():
         pause()
 
 
-def menu_bridge():
-    """Bridge management submenu."""
-    while True:
-        clear()
-        banner()
-        section("Poly Studio Bridge")
-        print()
-        print(f"  {DIM}The bridge makes unsupported devices (Blackwire 3220,{RESET}")
-        print(f"  {DIM}Savi 8220, etc.) visible in Poly Studio by proxying{RESET}")
-        print(f"  {DIM}between Clockwork and LegacyHost. Unsupported PIDs{RESET}")
-        print(f"  {DIM}are automatically spoofed to whitelisted equivalents.{RESET}")
-        print()
-        menu_item("1", "Start bridge",        "Launch MITM proxy (needs sudo)")
-        menu_item("2", "Stop bridge",          "Stop running bridge")
-        print()
-        menu_item("b", "Back")
-
-        choice = prompt()
-        if choice is None or choice in ('b', 'q'):
-            return
-
-        print()
-        if choice == '1':
-            info("Starting bridge (will request sudo)...")
-            print()
-            run_bridge()
-        elif choice == '2':
-            run_bridge("--stop")
-        else:
-            warn(f"Invalid choice: {choice}")
-            time.sleep(1)
-            continue
-
-        pause()
-
-
 def menu_debug():
     """Debug/probe tools submenu."""
     while True:
@@ -309,8 +267,7 @@ def main_menu():
         print()
         menu_item("1", "Devices",              "Scan, info, battery, monitor")
         menu_item("2", "Firmware",              "Check updates, flash, catalog")
-        menu_item("3", "Bridge",                 "Poly Studio device bridge")
-        menu_item("4", "Debug & Probes",        "HID protocol tools")
+        menu_item("3", "Debug & Probes",        "HID protocol tools")
         print()
 
         section("Quick Actions")
@@ -332,8 +289,6 @@ def main_menu():
         elif choice == '2':
             menu_firmware()
         elif choice == '3':
-            menu_bridge()
-        elif choice == '4':
             menu_debug()
         elif choice == 's':
             print()

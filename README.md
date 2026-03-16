@@ -41,7 +41,8 @@ Opens a web dashboard in your browser. That's it.
 | `menu.py` | Interactive terminal menu |
 | `fwu_flash.py` | Savi DECT firmware flasher |
 | `bw_flash.py` | Blackwire 3220 EEPROM flasher |
-| `poly_bridge.py` | MITM proxy for Poly Studio (macOS) |
+| `device_identity.py` | Device identity preservation during flash |
+| `device_settings.py` | HID settings read/write per device family |
 | `monitor_legacyhost.py` | Poly Lens log monitor |
 | `probes/` | HID protocol research tools |
 
