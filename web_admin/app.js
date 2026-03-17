@@ -1,10 +1,61 @@
 // ── PolyServer Admin Dashboard ──────────────────────────────────────────────
 
 let currentTab = 'overview';
+let adminKey = localStorage.getItem('admin_key') || '';
 
 document.addEventListener('DOMContentLoaded', () => {
-    switchTab('overview');
+    if (!adminKey) {
+        showLogin();
+    } else {
+        switchTab('overview');
+    }
 });
+
+function showLogin() {
+    const main = document.querySelector('main');
+    main.innerHTML = `
+        <div style="max-width:360px;margin:80px auto;text-align:center">
+            <div class="logo-icon" style="width:48px;height:48px;font-size:22px;margin:0 auto 24px">S</div>
+            <h3 style="margin-bottom:24px;font-size:18px">PolyServer Admin</h3>
+            <input id="login-key" type="password" class="setting-select"
+                style="width:100%;padding:10px 14px;margin-bottom:12px;font-size:14px"
+                placeholder="Admin API Key" onkeydown="if(event.key==='Enter')doLogin()">
+            <button class="btn-primary" style="width:100%;padding:10px" onclick="doLogin()">Sign In</button>
+            <p id="login-error" style="color:var(--red);margin-top:12px;font-size:13px;display:none"></p>
+            <p style="color:var(--gray-8);margin-top:16px;font-size:12px">
+                Key shown in server startup output
+            </p>
+        </div>`;
+    document.getElementById('login-key').focus();
+}
+
+async function doLogin() {
+    const key = document.getElementById('login-key').value.trim();
+    try {
+        const resp = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({key}),
+        });
+        if (resp.ok) {
+            adminKey = key;
+            localStorage.setItem('admin_key', key);
+            switchTab('overview');
+        } else {
+            const err = document.getElementById('login-error');
+            err.textContent = 'Invalid admin key';
+            err.style.display = 'block';
+        }
+    } catch (e) {
+        const err = document.getElementById('login-error');
+        err.textContent = 'Could not connect to server';
+        err.style.display = 'block';
+    }
+}
+
+function authHeaders() {
+    return adminKey ? {'Authorization': `Bearer ${adminKey}`, 'Content-Type': 'application/json'} : {'Content-Type': 'application/json'};
+}
 
 function switchTab(tab) {
     currentTab = tab;
@@ -290,13 +341,13 @@ async function submitPolicy() {
         target_pid: document.getElementById('pol-pid').value || '*',
         policy_value: document.getElementById('pol-value').value,
     };
-    await fetch('/api/policies', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    await fetch('/api/policies', {method:'POST', headers:authHeaders(), body:JSON.stringify(data)});
     loadPolicies();
 }
 
 async function deletePolicy(id) {
     if (!confirm('Delete this policy?')) return;
-    await fetch(`/api/policies/${id}`, {method:'DELETE'});
+    await fetch(`/api/policies/${id}`, {method:'DELETE', headers:authHeaders()});
     loadPolicies();
 }
 
@@ -355,7 +406,7 @@ async function pushCommand() {
 
     const resp = await fetch('/api/fleet/command', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: authHeaders(),
         body: JSON.stringify(data),
     });
     const result = await resp.json();

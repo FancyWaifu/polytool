@@ -230,6 +230,16 @@ def execute_apply_preset(cmd, data):
 
 # ── Agent Loop ────────────────────────────────────────────────────────────
 
+_agent_key = ""
+
+def _headers():
+    """Auth headers for server requests."""
+    h = {"Content-Type": "application/json"}
+    if _agent_key:
+        h["Authorization"] = f"Bearer {_agent_key}"
+    return h
+
+
 def run_report(server_url, agent_id):
     """Discover devices and report to server."""
     devices = discover_devices()
@@ -254,7 +264,7 @@ def run_report(server_url, agent_id):
 
     try:
         resp = requests.post(f"{server_url}/api/agent/report",
-                             json=payload, timeout=10)
+                             json=payload, headers=_headers(), timeout=10)
         if resp.status_code == 200:
             log.info(f"Reported {len(devices)} device(s) to server")
         else:
@@ -267,7 +277,8 @@ def poll_commands(server_url, agent_id):
     """Poll server for pending commands and execute them."""
     try:
         resp = requests.get(f"{server_url}/api/agent/commands",
-                            params={"agent_id": agent_id}, timeout=10)
+                            params={"agent_id": agent_id},
+                            headers=_headers(), timeout=10)
         if resp.status_code != 200:
             return
 
@@ -287,7 +298,7 @@ def poll_commands(server_url, agent_id):
                 "device_serial": cmd.get("device_serial", ""),
                 "status": result.get("status", "done"),
                 "result": result.get("result", ""),
-            }, timeout=10)
+            }, headers=_headers(), timeout=10)
 
     except Exception as e:
         log.error(f"Command poll failed: {e}")
@@ -329,9 +340,17 @@ def main():
                         help="Report interval in seconds (default: 60)")
     parser.add_argument("--once", action="store_true",
                         help="Single report, then exit")
+    parser.add_argument("--key", default=os.environ.get("POLYAGENT_KEY", ""),
+                        help="Agent API key (from server startup output)")
     args = parser.parse_args()
 
+    if not args.key:
+        log.warning("No API key provided. Use --key or set POLYAGENT_KEY env var.")
+
     agent_id = get_agent_id()
+
+    global _agent_key
+    _agent_key = args.key
 
     if args.once:
         run_report(args.server, agent_id)

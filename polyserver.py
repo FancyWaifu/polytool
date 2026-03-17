@@ -34,11 +34,14 @@ import sys
 import time
 import sqlite3
 import hashlib
+import secrets
+import hmac
+import functools
 from datetime import datetime, timedelta
 from pathlib import Path
 
 try:
-    from flask import Flask, jsonify, request, send_from_directory
+    from flask import Flask, jsonify, request, send_from_directory, g
 except ImportError:
     print("Flask required: pip install flask")
     sys.exit(1)
@@ -47,9 +50,136 @@ except ImportError:
 
 DATA_DIR = Path.home() / ".polytool" / "server"
 DB_PATH = DATA_DIR / "polytool.db"
+CONFIG_PATH = DATA_DIR / "server.json"
 WEB_DIR = Path(__file__).parent / "web_admin"
 
 app = Flask(__name__, static_folder=None)
+
+
+# ── Security ──────────────────────────────────────────────────────────────
+
+def load_or_create_config():
+    """Load server config or create with fresh API keys."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if CONFIG_PATH.exists():
+        return json.loads(CONFIG_PATH.read_text())
+
+    config = {
+        "admin_key": secrets.token_urlsafe(32),
+        "agent_key": secrets.token_urlsafe(32),
+        "created": datetime.utcnow().isoformat(),
+    }
+    CONFIG_PATH.write_text(json.dumps(config, indent=2))
+    CONFIG_PATH.chmod(0o600)  # owner read/write only
+    return config
+
+
+SERVER_CONFIG = load_or_create_config()
+
+
+def require_agent_key(f):
+    """Decorator: require valid agent API key in Authorization header."""
+    @functools.wraps(f)
+    def wrapped(*args, **kwargs):
+        auth = request.headers.get("Authorization", "")
+        token = auth.replace("Bearer ", "").strip()
+        if not token or not hmac.compare_digest(token, SERVER_CONFIG["agent_key"]):
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def require_admin_key(f):
+    """Decorator: require valid admin API key."""
+    @functools.wraps(f)
+    def wrapped(*args, **kwargs):
+        # Allow dashboard access without auth (served locally)
+        # API mutations require the admin key
+        auth = request.headers.get("Authorization", "")
+        token = auth.replace("Bearer ", "").strip()
+        # Also check query param for simple dashboard use
+        if not token:
+            token = request.args.get("key", "")
+        if not token:
+            # Check session cookie
+            token = request.cookies.get("admin_key", "")
+        if not token or not hmac.compare_digest(token, SERVER_CONFIG["admin_key"]):
+            return jsonify({"error": "Unauthorized — admin key required"}), 401
+        return f(*args, **kwargs)
+    return wrapped
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    """Admin login — exchange admin key for a session."""
+    data = request.get_json() or {}
+    key = data.get("key", "")
+    if hmac.compare_digest(key, SERVER_CONFIG["admin_key"]):
+        resp = jsonify({"status": "ok"})
+        resp.set_cookie("admin_key", key, httponly=True, samesite="Strict", max_age=86400)
+        return resp
+    return jsonify({"error": "Invalid admin key"}), 401
+
+
+@app.route("/api/auth/keys")
+def auth_show_keys():
+    """Show API keys (only accessible from localhost)."""
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        return jsonify({"error": "Only accessible from localhost"}), 403
+    return jsonify({
+        "admin_key": SERVER_CONFIG["admin_key"],
+        "agent_key": SERVER_CONFIG["agent_key"],
+        "note": "Add to agent: --key <agent_key>",
+    })
+
+
+# ── Rate Limiting ─────────────────────────────────────────────────────────
+
+_rate_limit_store = {}  # ip → (count, window_start)
+RATE_LIMIT_MAX = 120    # requests per window
+RATE_LIMIT_WINDOW = 60  # seconds
+
+
+@app.before_request
+def rate_limit():
+    """Simple in-memory rate limiter."""
+    ip = request.remote_addr
+    now = time.time()
+    if ip in _rate_limit_store:
+        count, window_start = _rate_limit_store[ip]
+        if now - window_start > RATE_LIMIT_WINDOW:
+            _rate_limit_store[ip] = (1, now)
+        elif count >= RATE_LIMIT_MAX:
+            return jsonify({"error": "Rate limit exceeded"}), 429
+        else:
+            _rate_limit_store[ip] = (count + 1, window_start)
+    else:
+        _rate_limit_store[ip] = (1, now)
+
+
+# ── Input Validation ─────────────────────────────────────────────────────
+
+def sanitize_string(s, max_len=256):
+    """Sanitize string input."""
+    if not isinstance(s, str):
+        return str(s)[:max_len]
+    return s.strip()[:max_len]
+
+
+def validate_agent_report(data):
+    """Validate agent report payload."""
+    if not isinstance(data, dict):
+        return False, "Invalid payload"
+    if "agent_id" not in data:
+        return False, "agent_id required"
+    if len(data.get("agent_id", "")) > 64:
+        return False, "agent_id too long"
+    devices = data.get("devices", [])
+    if not isinstance(devices, list):
+        return False, "devices must be a list"
+    if len(devices) > 50:
+        return False, "Too many devices (max 50)"
+    return True, ""
 
 # ── Database ──────────────────────────────────────────────────────────────
 
@@ -141,11 +271,13 @@ def init_db():
 # ── Agent API ─────────────────────────────────────────────────────────────
 
 @app.route("/api/agent/report", methods=["POST"])
+@require_agent_key
 def agent_report():
     """Agent reports its device inventory."""
     data = request.get_json()
-    if not data or "agent_id" not in data:
-        return jsonify({"error": "agent_id required"}), 400
+    ok, err = validate_agent_report(data)
+    if not ok:
+        return jsonify({"error": err}), 400
 
     agent_id = data["agent_id"]
     now = datetime.utcnow().isoformat()
@@ -201,6 +333,7 @@ def agent_report():
 
 
 @app.route("/api/agent/heartbeat", methods=["POST"])
+@require_agent_key
 def agent_heartbeat():
     """Agent check-in."""
     data = request.get_json() or {}
@@ -218,6 +351,7 @@ def agent_heartbeat():
 
 
 @app.route("/api/agent/commands", methods=["GET"])
+@require_agent_key
 def agent_get_commands():
     """Agent polls for pending commands."""
     agent_id = request.args.get("agent_id", "")
@@ -239,6 +373,7 @@ def agent_get_commands():
 
 
 @app.route("/api/agent/result", methods=["POST"])
+@require_agent_key
 def agent_command_result():
     """Agent reports command result."""
     data = request.get_json() or {}
@@ -360,6 +495,7 @@ def fleet_compliance():
 
 
 @app.route("/api/fleet/command", methods=["POST"])
+@require_admin_key
 def fleet_push_command():
     """Push a command to device(s)."""
     data = request.get_json() or {}
@@ -413,6 +549,7 @@ def list_policies():
 
 
 @app.route("/api/policies", methods=["POST"])
+@require_admin_key
 def create_policy():
     data = request.get_json() or {}
     db = get_db()
@@ -433,6 +570,7 @@ def create_policy():
 
 
 @app.route("/api/policies/<int:policy_id>", methods=["DELETE"])
+@require_admin_key
 def delete_policy(policy_id):
     db = get_db()
     db.execute("DELETE FROM policies WHERE id = ?", (policy_id,))
@@ -520,11 +658,18 @@ def main():
         return
 
     print(f"\n  PolyServer — Headset Management")
-    print(f"  Dashboard: http://localhost:{args.port}")
-    print(f"  Agent API: http://0.0.0.0:{args.port}/api/agent/")
-    print(f"  Database:  {DB_PATH}\n")
+    print(f"  Dashboard:  http://localhost:{args.port}")
+    print(f"  Agent API:  http://0.0.0.0:{args.port}/api/agent/")
+    print(f"  Database:   {DB_PATH}")
+    print(f"")
+    print(f"  Admin Key:  {SERVER_CONFIG['admin_key']}")
+    print(f"  Agent Key:  {SERVER_CONFIG['agent_key']}")
+    print(f"")
+    print(f"  Start agents with:")
+    print(f"    python3 polyagent.py --server http://THIS_IP:{args.port} --key {SERVER_CONFIG['agent_key']}")
+    print(f"")
 
-    app.run(host=args.host, port=args.port, debug=False)
+    app.run(host=args.host, port=args.port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":
