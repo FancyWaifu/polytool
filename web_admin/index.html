@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolyServer — Fleet Management</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F4E1;</text></svg>">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <div class="logo-icon">S</div>
+            <h1>PolyServer <span>Fleet</span></h1>
+        </div>
+    </header>
+    <nav>
+        <button data-tab="overview" class="active" onclick="switchTab('overview')">Overview</button>
+        <button data-tab="devices" onclick="switchTab('devices')">Devices</button>
+        <button data-tab="compliance" onclick="switchTab('compliance')">Compliance</button>
+        <button data-tab="policies" onclick="switchTab('policies')">Policies</button>
+        <button data-tab="commands" onclick="switchTab('commands')">Commands</button>
+        <button data-tab="audit" onclick="switchTab('audit')">Audit Log</button>
+    </nav>
+    <main><div class="loading"><div class="spinner"></div> Loading...</div></main>
+    <script src="/app.js"></script>
+</body>
+</html>
