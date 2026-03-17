@@ -182,90 +182,251 @@ def validate_agent_report(data):
     return True, ""
 
 # ── Database ──────────────────────────────────────────────────────────────
+# Supports PostgreSQL (recommended for production) or SQLite (zero-config).
+# Set POLYSERVER_DB env var or --db flag:
+#   PostgreSQL: postgresql://user:pass@host:5432/polytool
+#   SQLite:     sqlite:///path/to/db  or  (empty for default)
+
+_db_url = os.environ.get("POLYSERVER_DB", "")
+_use_postgres = False
+
+try:
+    import psycopg2
+    import psycopg2.extras
+    _has_psycopg2 = True
+except ImportError:
+    _has_psycopg2 = False
+
+
+class DBRow(dict):
+    """Dict that also supports attribute access like sqlite3.Row."""
+    def __getattr__(self, key):
+        try:
+            return self[key]
+        except KeyError:
+            raise AttributeError(key)
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
 
 def get_db():
-    db = sqlite3.connect(str(DB_PATH))
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA journal_mode=WAL")
-    return db
+    """Get a database connection. Returns (conn, is_postgres)."""
+    if _use_postgres:
+        conn = psycopg2.connect(_db_url)
+        return conn
+    else:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+
+def db_execute(conn, sql, params=None):
+    """Execute SQL with parameter placeholder translation for PG vs SQLite."""
+    if _use_postgres:
+        # Convert ? placeholders to %s for psycopg2
+        sql = sql.replace("?", "%s")
+        # Convert SQLite functions to PostgreSQL
+        sql = sql.replace("datetime('now')", "NOW()")
+        sql = sql.replace("datetime('now', '-5 minutes')", "NOW() - INTERVAL '5 minutes'")
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    else:
+        cur = conn.cursor()
+
+    if params:
+        cur.execute(sql, params)
+    else:
+        cur.execute(sql)
+    return cur
+
+
+def db_fetchall(conn, sql, params=None):
+    """Execute and fetch all rows as list of dicts."""
+    cur = db_execute(conn, sql, params)
+    rows = cur.fetchall()
+    if _use_postgres:
+        return [DBRow(r) for r in rows]
+    else:
+        return [DBRow(dict(r)) for r in rows]
+
+
+def db_fetchone(conn, sql, params=None):
+    """Execute and fetch one row."""
+    cur = db_execute(conn, sql, params)
+    row = cur.fetchone()
+    if row is None:
+        return None
+    if _use_postgres:
+        return DBRow(row)
+    return DBRow(dict(row))
 
 
 def init_db():
+    """Initialize database schema."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    db = get_db()
-    db.executescript("""
-        CREATE TABLE IF NOT EXISTS agents (
-            agent_id TEXT PRIMARY KEY,
-            hostname TEXT,
-            username TEXT,
-            platform TEXT,
-            ip_address TEXT,
-            agent_version TEXT,
-            last_seen TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
 
-        CREATE TABLE IF NOT EXISTS devices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            agent_id TEXT,
-            pid TEXT,
-            pid_hex TEXT,
-            serial TEXT,
-            product_name TEXT,
-            friendly_name TEXT,
-            firmware TEXT,
-            category TEXT,
-            dfu_executor TEXT,
-            family TEXT,
-            battery_level INTEGER DEFAULT -1,
-            last_seen TEXT,
-            first_seen TEXT DEFAULT (datetime('now')),
-            settings_json TEXT DEFAULT '{}',
-            UNIQUE(agent_id, serial, pid),
-            FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
-        );
+    if _use_postgres:
+        conn = psycopg2.connect(_db_url)
+        cur = conn.cursor()
 
-        CREATE TABLE IF NOT EXISTS policies (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            description TEXT DEFAULT '',
-            target_pid TEXT DEFAULT '*',
-            target_category TEXT DEFAULT '*',
-            policy_type TEXT NOT NULL,
-            policy_value TEXT NOT NULL,
-            enabled INTEGER DEFAULT 1,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS agents (
+                agent_id TEXT PRIMARY KEY,
+                hostname TEXT,
+                username TEXT,
+                platform TEXT,
+                ip_address TEXT,
+                agent_version TEXT,
+                last_seen TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS devices (
+                id SERIAL PRIMARY KEY,
+                agent_id TEXT REFERENCES agents(agent_id),
+                pid TEXT,
+                pid_hex TEXT,
+                serial TEXT,
+                product_name TEXT,
+                friendly_name TEXT,
+                firmware TEXT,
+                category TEXT,
+                dfu_executor TEXT,
+                family TEXT,
+                battery_level INTEGER DEFAULT -1,
+                last_seen TIMESTAMP,
+                first_seen TIMESTAMP DEFAULT NOW(),
+                settings_json TEXT DEFAULT '{}',
+                UNIQUE(agent_id, serial, pid)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS policies (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                target_pid TEXT DEFAULT '*',
+                target_category TEXT DEFAULT '*',
+                policy_type TEXT NOT NULL,
+                policy_value TEXT NOT NULL,
+                enabled INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS commands (
+                id SERIAL PRIMARY KEY,
+                agent_id TEXT,
+                device_serial TEXT DEFAULT '*',
+                device_pid TEXT DEFAULT '*',
+                command_type TEXT NOT NULL,
+                command_data TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                result TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT NOW(),
+                completed_at TIMESTAMP,
+                FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id SERIAL PRIMARY KEY,
+                timestamp TIMESTAMP DEFAULT NOW(),
+                agent_id TEXT,
+                device_serial TEXT,
+                action TEXT,
+                detail TEXT
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_devices_agent ON devices(agent_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_devices_pid ON devices(pid)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_commands_agent ON commands(agent_id, status)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp)")
 
-        CREATE TABLE IF NOT EXISTS commands (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            agent_id TEXT,
-            device_serial TEXT DEFAULT '*',
-            device_pid TEXT DEFAULT '*',
-            command_type TEXT NOT NULL,
-            command_data TEXT NOT NULL,
-            status TEXT DEFAULT 'pending',
-            result TEXT DEFAULT '',
-            created_at TEXT DEFAULT (datetime('now')),
-            completed_at TEXT,
-            FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
-        );
+        conn.commit()
+        conn.close()
+        print(f"  PostgreSQL database initialized")
 
-        CREATE TABLE IF NOT EXISTS audit_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT DEFAULT (datetime('now')),
-            agent_id TEXT,
-            device_serial TEXT,
-            action TEXT,
-            detail TEXT
-        );
+    else:
+        conn = get_db()
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS agents (
+                agent_id TEXT PRIMARY KEY,
+                hostname TEXT,
+                username TEXT,
+                platform TEXT,
+                ip_address TEXT,
+                agent_version TEXT,
+                last_seen TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
 
-        CREATE INDEX IF NOT EXISTS idx_devices_agent ON devices(agent_id);
-        CREATE INDEX IF NOT EXISTS idx_devices_pid ON devices(pid);
-        CREATE INDEX IF NOT EXISTS idx_commands_agent ON commands(agent_id, status);
-    """)
-    db.commit()
-    db.close()
+            CREATE TABLE IF NOT EXISTS devices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id TEXT,
+                pid TEXT,
+                pid_hex TEXT,
+                serial TEXT,
+                product_name TEXT,
+                friendly_name TEXT,
+                firmware TEXT,
+                category TEXT,
+                dfu_executor TEXT,
+                family TEXT,
+                battery_level INTEGER DEFAULT -1,
+                last_seen TEXT,
+                first_seen TEXT DEFAULT (datetime('now')),
+                settings_json TEXT DEFAULT '{}',
+                UNIQUE(agent_id, serial, pid),
+                FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS policies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                target_pid TEXT DEFAULT '*',
+                target_category TEXT DEFAULT '*',
+                policy_type TEXT NOT NULL,
+                policy_value TEXT NOT NULL,
+                enabled INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS commands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id TEXT,
+                device_serial TEXT DEFAULT '*',
+                device_pid TEXT DEFAULT '*',
+                command_type TEXT NOT NULL,
+                command_data TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                result TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                completed_at TEXT,
+                FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT DEFAULT (datetime('now')),
+                agent_id TEXT,
+                device_serial TEXT,
+                action TEXT,
+                detail TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_devices_agent ON devices(agent_id);
+            CREATE INDEX IF NOT EXISTS idx_devices_pid ON devices(pid);
+            CREATE INDEX IF NOT EXISTS idx_commands_agent ON commands(agent_id, status);
+        """)
+        conn.commit()
+        conn.close()
+        print(f"  SQLite database at {DB_PATH}")
 
 
 # ── Agent API ─────────────────────────────────────────────────────────────
@@ -282,10 +443,10 @@ def agent_report():
     agent_id = data["agent_id"]
     now = datetime.utcnow().isoformat()
 
-    db = get_db()
+    conn = get_db()
 
     # Update agent info
-    db.execute("""
+    db_execute(conn, """
         INSERT INTO agents (agent_id, hostname, username, platform, ip_address, agent_version, last_seen)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(agent_id) DO UPDATE SET
@@ -304,7 +465,7 @@ def agent_report():
         if not serial and not pid:
             continue
 
-        db.execute("""
+        db_execute(conn, """
             INSERT INTO devices (agent_id, pid, pid_hex, serial, product_name,
                 friendly_name, firmware, category, dfu_executor, family,
                 battery_level, last_seen, settings_json)
@@ -323,11 +484,11 @@ def agent_report():
               json.dumps(dev.get("settings", {}))))
 
     # Log
-    db.execute("INSERT INTO audit_log (agent_id, action, detail) VALUES (?, ?, ?)",
+    db_execute(conn, "INSERT INTO audit_log (agent_id, action, detail) VALUES (?, ?, ?)",
                (agent_id, "report", f"{len(devices)} device(s)"))
 
-    db.commit()
-    db.close()
+    conn.commit()
+    conn.close()
 
     return jsonify({"status": "ok", "devices_received": len(devices)})
 
@@ -341,11 +502,11 @@ def agent_heartbeat():
     if not agent_id:
         return jsonify({"error": "agent_id required"}), 400
 
-    db = get_db()
-    db.execute("UPDATE agents SET last_seen = ? WHERE agent_id = ?",
+    conn = get_db()
+    db_execute(conn, "UPDATE agents SET last_seen = ? WHERE agent_id = ?",
                (datetime.utcnow().isoformat(), agent_id))
-    db.commit()
-    db.close()
+    conn.commit()
+    conn.close()
 
     return jsonify({"status": "ok"})
 
@@ -358,14 +519,14 @@ def agent_get_commands():
     if not agent_id:
         return jsonify({"error": "agent_id required"}), 400
 
-    db = get_db()
-    rows = db.execute("""
+    conn = get_db()
+    rows = db_fetchall(conn, """
         SELECT id, command_type, command_data, device_serial, device_pid
         FROM commands
         WHERE agent_id = ? AND status = 'pending'
         ORDER BY created_at ASC
-    """, (agent_id,)).fetchall()
-    db.close()
+    """, (agent_id,))
+    conn.close()
 
     return jsonify({
         "commands": [dict(r) for r in rows]
@@ -381,19 +542,19 @@ def agent_command_result():
     if not cmd_id:
         return jsonify({"error": "command_id required"}), 400
 
-    db = get_db()
-    db.execute("""
+    conn = get_db()
+    db_execute(conn, """
         UPDATE commands SET status = ?, result = ?, completed_at = ?
         WHERE id = ?
     """, (data.get("status", "done"), data.get("result", ""),
           datetime.utcnow().isoformat(), cmd_id))
 
     # Audit log
-    db.execute("INSERT INTO audit_log (agent_id, device_serial, action, detail) VALUES (?, ?, ?, ?)",
+    db_execute(conn, "INSERT INTO audit_log (agent_id, device_serial, action, detail) VALUES (?, ?, ?, ?)",
                (data.get("agent_id", ""), data.get("device_serial", ""),
                 "command_result", json.dumps(data)))
-    db.commit()
-    db.close()
+    conn.commit()
+    conn.close()
 
     return jsonify({"status": "ok"})
 
@@ -403,14 +564,14 @@ def agent_command_result():
 @app.route("/api/fleet")
 def fleet_devices():
     """Get all devices across all agents."""
-    db = get_db()
-    rows = db.execute("""
+    conn = get_db()
+    rows = db_fetchall(conn, """
         SELECT d.*, a.hostname, a.username, a.platform, a.last_seen as agent_last_seen
         FROM devices d
         LEFT JOIN agents a ON d.agent_id = a.agent_id
         ORDER BY d.last_seen DESC
-    """).fetchall()
-    db.close()
+    """)
+    conn.close()
 
     devices = []
     for r in rows:
@@ -431,10 +592,10 @@ def fleet_devices():
 @app.route("/api/fleet/compliance")
 def fleet_compliance():
     """Check all devices against active policies."""
-    db = get_db()
-    devices = db.execute("SELECT * FROM devices").fetchall()
-    policies = db.execute("SELECT * FROM policies WHERE enabled = 1").fetchall()
-    db.close()
+    conn = get_db()
+    devices = db_fetchall(conn, "SELECT * FROM devices")
+    policies = db_fetchall(conn, "SELECT * FROM policies WHERE enabled = 1")
+    conn.close()
 
     results = []
     for dev in devices:
@@ -509,31 +670,31 @@ def fleet_push_command():
     if not command_type:
         return jsonify({"error": "command_type required"}), 400
 
-    db = get_db()
+    conn = get_db()
 
     # If agent_id is *, push to all agents
     if agent_id == "*":
-        agents = db.execute("SELECT agent_id FROM agents").fetchall()
+        agents = db_fetchall(conn, "SELECT agent_id FROM agents")
         agent_ids = [a["agent_id"] for a in agents]
     else:
         agent_ids = [agent_id]
 
     cmd_ids = []
     for aid in agent_ids:
-        cursor = db.execute("""
+        cur = db_execute(conn, """
             INSERT INTO commands (agent_id, device_serial, device_pid, command_type, command_data)
             VALUES (?, ?, ?, ?, ?)
         """, (aid, device_serial, device_pid, command_type,
               json.dumps(command_data) if isinstance(command_data, dict) else command_data))
-        cmd_ids.append(cursor.lastrowid)
+        cmd_ids.append(cur.lastrowid)
 
-    db.execute("INSERT INTO audit_log (action, detail) VALUES (?, ?)",
+    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (?, ?)",
                ("push_command", json.dumps({
                    "type": command_type, "agents": len(agent_ids),
                    "pid": device_pid, "serial": device_serial,
                })))
-    db.commit()
-    db.close()
+    conn.commit()
+    conn.close()
 
     return jsonify({"status": "ok", "command_ids": cmd_ids, "agents": len(agent_ids)})
 
@@ -542,9 +703,9 @@ def fleet_push_command():
 
 @app.route("/api/policies", methods=["GET"])
 def list_policies():
-    db = get_db()
-    rows = db.execute("SELECT * FROM policies ORDER BY created_at DESC").fetchall()
-    db.close()
+    conn = get_db()
+    rows = db_fetchall(conn, "SELECT * FROM policies ORDER BY created_at DESC")
+    conn.close()
     return jsonify({"policies": [dict(r) for r in rows]})
 
 
@@ -552,8 +713,8 @@ def list_policies():
 @require_admin_key
 def create_policy():
     data = request.get_json() or {}
-    db = get_db()
-    cursor = db.execute("""
+    conn = get_db()
+    cur = db_execute(conn, """
         INSERT INTO policies (name, description, target_pid, target_category,
             policy_type, policy_value, enabled)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -561,23 +722,23 @@ def create_policy():
           data.get("target_pid", "*"), data.get("target_category", "*"),
           data.get("policy_type", ""), data.get("policy_value", ""),
           1 if data.get("enabled", True) else 0))
-    db.execute("INSERT INTO audit_log (action, detail) VALUES (?, ?)",
+    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (?, ?)",
                ("create_policy", json.dumps(data)))
-    db.commit()
-    policy_id = cursor.lastrowid
-    db.close()
+    conn.commit()
+    policy_id = cur.lastrowid
+    conn.close()
     return jsonify({"status": "ok", "id": policy_id})
 
 
 @app.route("/api/policies/<int:policy_id>", methods=["DELETE"])
 @require_admin_key
 def delete_policy(policy_id):
-    db = get_db()
-    db.execute("DELETE FROM policies WHERE id = ?", (policy_id,))
-    db.execute("INSERT INTO audit_log (action, detail) VALUES (?, ?)",
+    conn = get_db()
+    db_execute(conn, "DELETE FROM policies WHERE id = ?", (policy_id,))
+    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (?, ?)",
                ("delete_policy", str(policy_id)))
-    db.commit()
-    db.close()
+    conn.commit()
+    conn.close()
     return jsonify({"status": "ok"})
 
 
@@ -585,28 +746,28 @@ def delete_policy(policy_id):
 
 @app.route("/api/stats")
 def fleet_stats():
-    db = get_db()
-    total_devices = db.execute("SELECT COUNT(*) FROM devices").fetchone()[0]
-    total_agents = db.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
-    online_agents = db.execute("""
-        SELECT COUNT(*) FROM agents
+    conn = get_db()
+    total_devices = db_fetchone(conn, "SELECT COUNT(*) FROM devices")[0]
+    total_agents = db_fetchone(conn, "SELECT COUNT(*) FROM agents")[0]
+    online_agents = db_fetchone(conn, """
+        SELECT COUNT(*) as cnt FROM agents
         WHERE datetime(last_seen) > datetime('now', '-5 minutes')
-    """).fetchone()[0]
+    """)["cnt"]
 
-    by_category = db.execute("""
+    by_category = db_fetchall(conn, """
         SELECT category, COUNT(*) as count FROM devices GROUP BY category
-    """).fetchall()
+    """)
 
-    by_firmware = db.execute("""
+    by_firmware = db_fetchall(conn, """
         SELECT pid_hex, friendly_name, firmware, COUNT(*) as count
         FROM devices GROUP BY pid, firmware ORDER BY count DESC
-    """).fetchall()
+    """)
 
-    recent_log = db.execute("""
+    recent_log = db_fetchall(conn, """
         SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 20
-    """).fetchall()
+    """)
 
-    db.close()
+    conn.close()
 
     return jsonify({
         "total_devices": total_devices,
@@ -623,10 +784,10 @@ def fleet_stats():
 @app.route("/api/audit")
 def audit_log():
     limit = request.args.get("limit", 100, type=int)
-    db = get_db()
-    rows = db.execute("SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?",
-                       (limit,)).fetchall()
-    db.close()
+    conn = get_db()
+    rows = db_fetchall(conn, "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?",
+                       (limit,))
+    conn.close()
     return jsonify({"log": [dict(r) for r in rows]})
 
 
@@ -649,7 +810,22 @@ def main():
     parser.add_argument("--port", type=int, default=8421)
     parser.add_argument("--init", action="store_true", help="Initialize database")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address")
+    parser.add_argument("--db", default=os.environ.get("POLYSERVER_DB", ""),
+                        help="Database URL (postgresql://... or empty for SQLite)")
     args = parser.parse_args()
+
+    # Configure database backend
+    global _db_url, _use_postgres
+    _db_url = args.db
+    if _db_url.startswith("postgresql://") or _db_url.startswith("postgres://"):
+        if not _has_psycopg2:
+            print("Error: psycopg2 required for PostgreSQL. Install with: pip install psycopg2-binary")
+            sys.exit(1)
+        _use_postgres = True
+        print(f"  Database: PostgreSQL")
+    else:
+        _use_postgres = False
+        print(f"  Database: SQLite")
 
     init_db()
 
