@@ -1,0 +1,324 @@
+================================================================================
+POLYTOOL REVERSE ENGINEERING FINDINGS
+================================================================================
+Last updated: 2026-03-16
+
+All findings from reverse engineering Poly/Plantronics USB headsets.
+Protocols, registers, EEPROM layouts, CVM commands, and settings maps.
+
+
+================================================================================
+1. BLACKWIRE 3220 (PID 0xC056, Conexant CX2070x)
+================================================================================
+
+Chipset: Conexant CX2070x
+Interface: Usage page 0xFFA0
+Flash: S-record PTC patches to EEPROM (CxEepromDfu)
+Firmware: 8KB EEPROM patches, not full firmware replacement
+
+WRITABLE REGISTERS (verified via write-readback):
+  0x191A  Sidetone Gain    0x0000-0x7FFF (maps to 0-10 UI scale)
+  0x1900  Sidetone Ctrl    0x0001=on, 0x0000=off
+  0x00A0  GPIO Ctrl        writable but DANGEROUS (hardware pin control)
+
+READ-ONLY REGISTERS:
+  0x0040  Codec Ctrl       0x4000
+  0x0044  I2S Ctrl         0x0800
+
+NOT SUPPORTED (return 0x0202):
+  0x0800  DAC Vol L        Use OS volume instead
+  0x0801  DAC Vol R        Use OS volume instead
+  0x0808  DAC Mute         Use OS mute instead
+  0x0900  ADC Vol          Use OS mic volume instead
+  0x0908  ADC Mute         Use OS mic mute instead
+
+HID Protocol:
+  Report ID 4 (output): [0x04, cmd, length, addr_hi, addr_lo, data...]
+  Report ID 5 (input):  [0x05, data...]
+  Commands: 0x00=register read, 0x40=register write
+            0x20=EEPROM read, 0x60=EEPROM write
+  Write-enable: set bit 7 of register 0x1000 before EEPROM writes
+  Max chunk: 30 bytes per transfer
+
+EEPROM MAP (0x0000-0x0200):
+  0x0000-0x001F  Device header (VID, config)
+  0x0020-0x002F  Device config, calibration, birth marks *** PRESERVE ***
+  0x0030-0x003F  Firmware version, descriptor pointers
+  0x0040-0x0041  Descriptor table pointer
+  0x0042-0x0083  USB serial number (UTF-16LE, 32 chars) *** PRESERVE ***
+  0x0084-0x009B  Manufacturer string "Plantronics" (UTF-16LE)
+  0x009C-0x00DF  Product string "Plantronics Blackwire 3220 Series" (UTF-16LE)
+  0x00E0-0x0107  Device descriptor "UCQ00011000001000" (UTF-16LE)
+  0x0170-0x01FF  Audio routing table, codec config, gain curves
+
+FIRMWARE PTC FILE:
+  Format: S3 records (Motorola S-record)
+  Addresses: 0x0002-0x1D75
+  DANGER: PTC overwrites 0x0042-0x0083 with all 'F' characters (0x46)
+          and changes config at 0x0020-0x002F
+  SOLUTION: Backup these regions before flash, restore after
+  Internal string: "PLT_BlackWire_C3220_Patch_15-5F-19_Rev_0225_NVM-CATP_DSP"
+
+FEATURE REPORTS:
+  FR 17: 0x11 5E 04 00 02  (device info)
+  FR 18: 0x12 02 14 3F 03  (capabilities)
+  FR 27: 0x1B FD 00        (status)
+  FR 29: 0x1D 00           (state)
+
+
+================================================================================
+2. BLACKWIRE 3320 (PID 0x430A, TI DA14195 + Tensilica DSP)
+================================================================================
+
+Chipset: Dialog Semiconductor DA14195 (ARM Cortex-M) + Tensilica DSP
+Internal codename: "Manatee" on "Zeus" framework
+Flash: FIRMWARE container via BladeRunner FTP (HidTiDfu)
+Build system: Jenkins at zeus-manatee-dev-mainline-DA14195
+
+FIRMWARE CONTAINER:
+  Magic: "FIRMWARE" (8 bytes)
+  Sections: APP_MAIN (ARM code), APP_DSP (Tensilica DSP code)
+  Two-image system: trial + stable (anti-brick)
+  Components per zip:
+    fw.bin       - main application firmware
+    bl.bin       - bootloader (separate flash)
+    tf_m.bin     - DSP tuning files
+    rules.json   - component manifest
+
+FIRMWARE STRINGS FOUND:
+  - ANC (Active Noise Cancellation): "ANC Enabled", "ANC Bypassed"
+  - DSP modes: Idle, Tele, Music, Test
+  - Voice Activity Detection
+  - Mic Calibration
+  - Earcon volume bump sounds
+  - Teams integration: "Teams:Connection Lost", "SendTeamsAttention"
+  - BladeRunner/Deckard: "BR: Gateway Task", "Deckard: Unhandled Message"
+  - PStore: "PStore Write 0x%.4x", "PStore Read 0x%.4x"
+  - Codec: Dialog DA7217/DA7218 auto-detection
+  - Flash: Macronix SPI
+
+MULTI-PRODUCT BINARY (one FW supports all):
+  Poly Blackwire 3320 Series
+  Poly Blackwire 3310 Series
+  Poly Blackwire 3325 Series
+  Poly Blackwire 3315 Series
+  Poly EncorePro 320/310
+  Poly DA75/DA85
+  Poly EncorePro 515/525/545 USB
+
+DFU STATE MACHINE:
+  DFU_STATE_BTLR_NODFU_NOIMAGE
+  DFU_STATE_APPL_NODFU_NOIMAGE
+  DFU_STATE_BTLR_RECEIVE_TRIAL
+  DFU_STATE_APPL_RECEIVE_TRIAL
+  DFU_STATE_BTLR_WRITE_TRIAL
+  DFU_STATE_APPL_WRITE_TRIAL
+  DFU_STATE_BTLR_VERIFY_TRIAL
+  DFU_STATE_APPL_VERIFY_TRIAL
+  DFU_STATE_BTLR_PROMOTE_TRIAL
+  ... (trial → verify → promote → stable)
+
+
+================================================================================
+3. SAVI 8220 / W8220T (PID 0xACFF, DECT Base/Headset)
+================================================================================
+
+Protocol: FWU API (CVM mailbox, 0x4Fxx primitives)
+Interface: Usage page 0xFFA2
+Sign-on: RID 13 [0x0D, 0x15] → RID 2 response
+Requires: USB reset (pyusb) on macOS before any protocol
+
+FWU API PRIMITIVES (little-endian 16-bit on wire):
+  0x4F00  ENABLE_REQ      [enable, version]
+  0x4F01  ENABLE_CFM      [status] (0=success)
+  0x4F02  DEVICE_NOTIFY_IND  [present, devnr, dev_id(4), offset(4), mode, link_date(5), range_start(4), range_size(4)]
+  0x4F03  UPDATE_REQ      [devnr, mode]
+  0x4F04  UPDATE_CFM      [devnr, status]
+  0x4F05  UPDATE_IND      [devnr, dev_id(4), offset(4), mode, link_date(5), range_start(4), range_size(4)]
+  0x4F06  UPDATE_RES      [devnr, link_date(5), ctx(4), range_count(4), ranges...]
+  0x4F07  GET_BLOCK_IND   [devnr, ctx(4), addr(4), size(4)]
+  0x4F08  GET_BLOCK_RES   [devnr, ctx(4), addr(4), size(4), data...]
+  0x4F09  GET_CRC_IND     [devnr, ctx(4), addr(4), size(4)]
+  0x4F0A  GET_CRC_RES     [devnr, ctx(4), addr(4), size(4), crc16(2)]
+  0x4F0B  COMPLETE_IND    [ctx(4)]
+  0x4F0C  STATUS_IND      [busy, dev0_status, dev0_detail, dev1_status, dev1_detail]
+  0x4F14  CRC32_IND       [devnr, ctx(4), addr(4), n_sizes, sizes(2*n)]
+  0x4F15  CRC32_RES       [devnr, ctx(4), addr(4), n_sizes, [size(2),crc32(4)]...]
+
+HID FRAMING (from TxFragments disassembly):
+  First fragment: [ReportID=3] [0x20] [PayloadLen] [LE16 prim_id] [params...] [padding]
+  Continuation:   [ReportID=3] [0x80] [data...]
+  ACK: Report ID 5
+
+SIGN-ON (RID 13 output, 1 byte):
+  Bit layout: [pad:3][trigger:1][mode:2][signon:2]
+  Value 0x15 = signon=1, mode=1, trigger=1 (WORKS)
+  Response: RID 2 with state bits
+
+SETTINGS REPORT (RID 14, arrives after sign-on):
+  0E 61 38 04 00 39 30 FF FF 00 01 FF FF 09 04 03 00 00
+  Bytes 1-2: firmware version (LE) → 0x3861 = 38.61
+  Bytes 5-6: ASCII product code "90"
+  Byte 10: headset connected (0x01 = yes)
+  READ-ONLY via direct USB
+
+FLASH TESTED:
+  Device ID: 0x0D9A00A0
+  Flash range: 0x130000-0x220000 (983040 bytes)
+  Result: 4915 blocks, 991392 bytes, 88.7s, COMPLETE_IND received
+  CRC: CRC-CCITT (CRC16) for block verify, CRC32 (no final XOR) for bulk verify
+
+
+================================================================================
+4. SAVI 7300 OFFICE SERIES (PID 0xAC28, DECT Base)
+================================================================================
+
+Protocol: FWU API (CVM) + proprietary settings
+Interfaces: 0x000C, 0xFFA1, 0x000B, 0xFFA2, 0xFFA0, 0xFF58
+Sign-on: Same as Savi 8220
+
+CVM COMMANDS DISCOVERED:
+  0x4000 → CRASHES DEVICE (reset/init — dangerous, avoid!)
+  0x4002 → 0x4003: Device info (22 bytes)
+    Byte 0: device_nr
+    Bytes 1-2: firmware version (LE) = 0x1071
+    Bytes 3-4: unknown
+    Bytes 5-9: link date (25 05 02 19 25)
+    Byte 10: mode (0xFF)
+    Byte 11: headset type (0x09)
+    Byte 12: unknown
+    Byte 13: settings count (0x0E = 14)
+    Byte 14: unknown (0x00)
+    Bytes 15-21: SETTINGS VALUES as nibbles:
+      [0, 6, 0, 12, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      Setting 1 = 6 (ringtone volume?)
+      Setting 3 = 12 (sidetone level?)
+      Setting 4 = 2 (mode?)
+
+  0x4004 → 0x4005: MAC address
+    Bytes: 00 03 8E 9B CA A0
+    MAC: 03:8E:9B:CA:A0
+
+  0x4006 → 0x4007: Base PID
+    Bytes: 00 AC 01 00
+    PID echo: 0xAC01 (Savi 700 base variant)
+
+  0x4008 → 0x4009: Status (1 byte)
+  0x400A → 0x400B: Partial serial (5 bytes)
+
+  0x4102 → 0x4103: Headset type = 9
+  0x4105 → 0x4106: Status
+  0x4109 → 0x410A: Headset info (9 bytes)
+
+  0x4800 → 0x4801: Connection status
+    Byte 5: 0x01 = headset connected
+  0x4804 → 0x4805: Serial fragment
+
+FEATURE REPORTS:
+  FR 15: Device state, PID at bytes 20-21, battery at 24-27 (0x7F=unavailable)
+  FR 72: "PROD,213656-01, 27" (base part number)
+  FR 73: "PROD,215310-01, 27" (headset part number)
+  FR 154: All zeros (unused or settings register)
+
+FWU FLASH:
+  Reports TWO updatable devices:
+    Device 0: ID=0x0D9A0146 mode=0x01 (base station)
+    Device 1: ID=0x0D9A0147 mode=0x11 (headset, takes ~8s via DECT)
+  STATUS_IND: FF 05 24 24 09 09 09 (5 components)
+
+RID 88 (0x58) on FF58:
+  Spontaneous event during FWU: 58 10 00 0D 00 00 00 67 F0 7E FF 04 00 03 15
+  May carry headset status/battery via DECT relay
+
+SETTINGS WRITE: NOT YET FOUND
+  Tried:
+    - 0x4001 with modified settings blob → silently accepted, no change
+    - 0x4900-0x4B10 range → no responses
+    - BladeRunner on all interfaces (FFA0/FFA1/FFA2/FF58) → no handshake
+    - RID 0x0E output report → accepted silently, no effect
+    - FR 0x0E feature report write → read error
+  Settings likely written through legacyhost DECT management protocol
+  (not accessible via raw USB HID without the Poly Lens stack)
+
+
+================================================================================
+5. VOYAGER BASE-M CD (PID 0x02EA, Bluetooth Dock)
+================================================================================
+
+Protocol: Proprietary Bluetooth management on 0xFF99
+Interfaces: 0xFF99, 0x000C, 0x000B, 0xFFA2, 0xFFA0
+
+FF99 INTERFACE:
+  Feature reports:
+    FR 6: 0x00 (command register?)
+    FR 12: PID echo (EA 02 = 0x02EA)
+    FR 17: Report size (0x20 = 32)
+    FR 30: Headset connection status (0x00=off, 0x02=connected)
+    FR 43: 0x02 (BT mode?)
+
+  Button events (RID 1):
+    01 01 = button pressed
+    01 00 = button released
+    Only interface producing input reports
+
+  No BladeRunner, no CVM, no DECT sign-on
+  Device management goes through Poly Lens Bluetooth stack
+  Flash uses btNeoDfu (over Bluetooth, not USB)
+  Feature reports often give "read error" — needs USB reset
+
+NOTES:
+  - Headset does NOT appear as separate USB device
+  - All communication tunneled through base PID 0x02EA
+  - Settings/battery/firmware for paired headset → BT protocol only
+
+
+================================================================================
+6. GENERAL FINDINGS
+================================================================================
+
+USB RESET REQUIRED (macOS):
+  macOS IOKit caches HID handles. After killing Poly Lens, stale routing
+  prevents reading input reports. USB reset via pyusb required before:
+  - FWU protocol (sign-on, enable, block transfer)
+  - Any protocol needing input report responses
+  Install: pip install pyusb
+
+DEVICE IDENTITY PRESERVATION:
+  CX2070x PTC firmware files overwrite device-unique EEPROM data:
+  - Serial number (0x0042-0x0083) → filled with 'F' chars
+  - Config bytes (0x0020-0x002F) → changed
+  This breaks Poly Lens detection. Solution implemented in device_identity.py:
+  backup before flash, restore after.
+
+VERSION NORMALIZATION:
+  Cloud: "0225_0_0" or "3861.3039.100"
+  Device BCD: "2.25" or "38.61"
+  Algorithm:
+    1. Strip after underscore
+    2. If ≤2 dot-parts: concatenate digits (BCD decode)
+    3. If 3+ dot-parts: take first component only
+  Result: 0225_0_0 → 225, 2.25 → 225, 3861.3039.100 → 3861
+
+FIRMWARE FORMATS:
+  S-record PTC: CX2070x EEPROM patches (Blackwire 3220)
+  FWU: DECT device firmware (Savi series) — magic "FWU\x05"
+  FIRMWARE: TI ARM+DSP container (Blackwire 33xx) — magic "FIRMWARE"
+  CSR-dfu2: Cambridge Silicon Radio BT firmware — magic "CSR-dfu2"
+  APPUHDR5: Qualcomm QCC5xxx BT firmware — magic "APPUHDR5"
+
+CVM API PATTERN:
+  Even primitives = request (host → device)
+  Odd primitives = response (device → host)
+  Always: request 0xNN00 → response 0xNN01, etc.
+  LE 16-bit encoding on wire
+
+HID FRAMING (CVM/FWU):
+  [ReportID=3] [0x20=START] [PayloadLen] [LE16 prim_id] [params...] [pad to 64]
+  Continuation: [ReportID=3] [0x80] [data...]
+  ACK channel: Report ID 5
+
+POLY LENS COMPATIBILITY:
+  Poly Lens detects Blackwire 3220 (PID 0xC056) on clean installs
+  even though C056 is NOT in Devices.config. Detection goes through
+  PolyDolphin.dylib fallback probe path (newer versions).
+  Our flashing preserves compatibility via identity backup/restore.
