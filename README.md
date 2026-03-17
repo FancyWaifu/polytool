@@ -1,23 +1,33 @@
 # PolyTool
 
-Open-source toolkit for Poly/Plantronics USB headsets on macOS, Linux, and Windows. Replaces the official Poly Lens desktop app with a lightweight web dashboard and CLI tools.
+Open-source toolkit for Poly/Plantronics USB headsets. Replaces the official Poly Lens desktop app with a lightweight web dashboard, CLI tools, and a fleet management server.
 
 ## Features
 
-- **Device Management** — Detect all connected Poly headsets, view firmware, battery, serial
+- **Web Dashboard** — Device management, firmware updates, and settings at `localhost:8420`
 - **Firmware Updates** — Download from Poly Cloud and flash directly over USB HID
-- **Device Settings** — Sidetone, EQ, volume, mute, and more via web UI
-- **Web Dashboard** — Clean browser UI at `localhost:8420`, no Electron bloat
-- **28 Devices Supported** — Blackwire, Savi, Sync, Voyager, EncorePro series
+- **Device Settings** — Sidetone, EQ, volume, mute, and more
+- **Fleet Management** — Central server with PostgreSQL, agent-based reporting, policy enforcement
+- **Remote Configuration** — Push settings changes to headsets across your network
+- **Identity Preservation** — Firmware flashing preserves device serial numbers and Poly Lens compatibility
+- **28+ Devices Supported** — Blackwire, Savi, Sync, Voyager, EncorePro series
 
 ## Quick Start
 
+**Single workstation:**
 ```bash
-pip install hidapi requests flask pyusb rich
+pip install -r requirements.txt
 python3 polylens.py
 ```
 
-Opens a web dashboard in your browser. That's it.
+**Fleet management:**
+```bash
+# Server (requires PostgreSQL)
+python3 polyserver.py --db postgresql://user:pass@localhost/polytool
+
+# Agent (on each workstation)
+python3 polyagent.py --server http://server:8421 --key <agent_key>
+```
 
 ## Supported Devices
 
@@ -36,14 +46,16 @@ Opens a web dashboard in your browser. That's it.
 
 | File | Description |
 |------|-------------|
-| `polylens.py` | Web dashboard (start here) |
+| `polylens.py` | Web dashboard for single workstation |
+| `polyserver.py` | Fleet management server (PostgreSQL) |
+| `polyagent.py` | Workstation agent for fleet reporting |
+| `polyremote.py` | CLI for remote settings changes |
 | `polytool.py` | CLI for scan, info, battery, updates, flash |
 | `menu.py` | Interactive terminal menu |
 | `fwu_flash.py` | Savi DECT firmware flasher |
 | `bw_flash.py` | Blackwire 3220 EEPROM flasher |
 | `device_identity.py` | Device identity preservation during flash |
 | `device_settings.py` | HID settings read/write per device family |
-| `monitor_legacyhost.py` | Poly Lens log monitor |
 | `probes/` | HID protocol research tools |
 
 ## Web Dashboard
@@ -52,106 +64,112 @@ Opens a web dashboard in your browser. That's it.
 python3 polylens.py
 ```
 
-Tabs:
 - **Devices** — Connected headsets with firmware, battery, serial. Auto-refreshes.
-- **Firmware Updates** — Check Poly Cloud, download, and flash with one click.
-- **Settings** — Sidetone, EQ, noise limiting, wearing sensor, language, etc.
+- **Updates** — Check Poly Cloud, download, and flash with one click.
+- **Settings** — Sidetone, EQ, noise limiting, wearing sensor, language, and more.
 - **Catalog** — Search all Poly firmware online.
+
+## Fleet Management
+
+Central server for managing headsets across an organization.
+
+**Server** (`polyserver.py`):
+```bash
+# Requires PostgreSQL
+python3 polyserver.py --db postgresql://user:pass@localhost/polytool
+```
+
+The server prints API keys on startup. Use the agent key to connect workstations.
+
+**Agent** (`polyagent.py`):
+```bash
+# Run on each workstation — reports devices every 60s
+python3 polyagent.py --server http://server:8421 --key <agent_key>
+
+# Single report and exit
+python3 polyagent.py --server http://server:8421 --key <agent_key> --once
+```
+
+**Admin Dashboard** at `http://server:8421`:
+- **Overview** — Device counts, firmware versions, online agents, recent activity
+- **Devices** — Every headset across the org with online/offline status, host, user
+- **Compliance** — Policy violations with details per device
+- **Policies** — Enforce firmware versions and settings across the fleet
+- **Commands** — Push settings changes to all agents
+- **Audit Log** — Full activity history
+
+**Security:**
+- API key authentication for agents and admin dashboard
+- Rate limiting (120 req/min per IP)
+- Input validation on all endpoints
+- Keys auto-generated on first run, stored with restricted permissions
+
+## PolyRemote
+
+Standalone CLI for headset settings. Coexists with Poly Lens — does not modify firmware or the managed client.
+
+```bash
+python3 polyremote.py list                              # List devices
+python3 polyremote.py set "Sidetone Level" 5            # Change a setting
+python3 polyremote.py set "Ringtone Volume" 8 --pid 0xACFF  # Target specific device
+python3 polyremote.py get "Sidetone Level"              # Read a setting
+python3 polyremote.py dump                              # Dump all settings
+python3 polyremote.py batch presets/office_standard.json # Apply preset
+python3 polyremote.py settings                          # List available settings
+```
+
+JSON output for automation (auto-enabled when piped):
+```bash
+python3 polyremote.py list --json | jq '.devices[].name'
+python3 polyremote.py dump --json > device_report.json
+```
+
+Included presets in `presets/`:
+- `office_standard.json` — Standard office config
+- `call_center.json` — High-volume call center
+- `quiet_mode.json` — Minimal audio feedback
 
 ## CLI Usage
 
 ```bash
-# Scan for devices
-python3 polytool.py scan
-
-# Check for firmware updates
-python3 polytool.py updates
-
-# Flash firmware
-python3 polytool.py update
-
-# Device info
-python3 polytool.py info
-
-# Battery status
-python3 polytool.py battery
-
-# Interactive menu
-python3 menu.py
+python3 polytool.py scan       # Discover devices
+python3 polytool.py info       # Detailed device info
+python3 polytool.py battery    # Battery status
+python3 polytool.py updates    # Check for firmware updates
+python3 polytool.py update     # Download and flash firmware
+python3 polytool.py catalog    # Search Poly firmware catalog
+python3 menu.py                # Interactive terminal menu
 ```
 
 ## Firmware Flashing
 
-Three protocols are implemented, all reverse-engineered from Poly Lens:
+Three protocols, all reverse-engineered from Poly Lens:
 
-**CX2070x EEPROM** (Blackwire 3220) — Writes S-record patches to Conexant EEPROM via HID. Preserves device serial number and calibration data automatically.
+**CX2070x EEPROM** (Blackwire 3220) — S-record patches to Conexant EEPROM via HID. Automatically preserves serial number and calibration data.
 
-**FWU API** (Savi series) — CVM mailbox protocol with LE 16-bit primitive IDs over USB HID. Requires `pyusb` for USB reset before flash on macOS.
+**FWU API** (Savi series) — CVM mailbox protocol with LE 16-bit primitive IDs. Tested: 4,915 blocks, 991 KB, 89 seconds.
 
-**BladeRunner FTP** (Blackwire 33xx, Sync, EncorePro) — File transfer protocol over HID with handshake, block writes, and CRC32 verification.
-
-All flash paths preserve device identity (serial number, calibration) so headsets remain compatible with Poly Lens after updates.
-
-## Device Identity Preservation
-
-Firmware update files contain generic placeholder values that overwrite device-unique EEPROM data (serial numbers, calibration bytes). PolyTool automatically backs up and restores this data during flash, so headsets remain fully functional in Poly Lens and other management tools.
+**BladeRunner FTP** (Blackwire 33xx, Sync, EncorePro) — File transfer over HID with handshake, block writes, and CRC32 verification.
 
 ## Requirements
 
 - Python 3.9+
 - `hidapi` — HID device communication
 - `requests` — Poly Cloud API
-- `flask` — Web dashboard
+- `flask` — Web dashboard and server
 - `pyusb` — USB reset for Savi flash (macOS)
+- `psycopg2-binary` — PostgreSQL (fleet server)
 - `rich` — Terminal formatting (optional)
 
-## PolyRemote
-
-Standalone CLI tool for changing headset settings. Does not modify firmware or the Poly Lens client.
-
-**Coexists with Poly Lens** — does not kill, modify, or interfere with the managed client.
-
 ```bash
-# List devices
-python3 polyremote.py list
-
-# Change a setting on all connected headsets
-python3 polyremote.py set "Sidetone Level" 5
-
-# Target a specific device model
-python3 polyremote.py set "Ringtone Volume" 8 --pid 0xACFF
-
-# Read current setting
-python3 polyremote.py get "Sidetone Level"
-
-# Dump all settings
-python3 polyremote.py dump
-
-# Apply a preset from file
-python3 polyremote.py batch presets/office_standard.json
-
-# List all available settings
-python3 polyremote.py settings
+pip install -r requirements.txt
 ```
-
-**JSON output** for automation (auto-enabled when piped):
-```bash
-python3 polyremote.py list --json | jq '.devices[].name'
-python3 polyremote.py dump --json > device_report.json
-```
-
-**Included presets** (`presets/`):
-- `office_standard.json` — Standard office config
-- `call_center.json` — High-volume call center
-- `quiet_mode.json` — Minimal audio feedback
-
-**Audit logging** to `~/.polytool/logs/polyremote.log` — every get/set operation is logged with timestamp, device PID, serial, setting name, and result.
 
 ## How It Works
 
-PolyTool talks directly to headsets over USB HID — the same protocols Poly Lens uses internally. No cloud account, no background services, no auto-launching daemons. Start it when you need it, close it when you don't.
+PolyTool talks directly to headsets over USB HID using the same protocols Poly Lens uses internally. Firmware is downloaded from Poly's public CDN and flashed using reverse-engineered protocols from `libDFUManager.dylib`.
 
-Firmware is downloaded from Poly's public CDN (no authentication required) and flashed using reverse-engineered protocols from `libDFUManager.dylib` and the Poly Lens DFU executors.
+See `RE_FINDINGS.txt` for the complete reverse engineering documentation — register maps, CVM commands, EEPROM layouts, and protocol details for every tested device.
 
 ## License
 
