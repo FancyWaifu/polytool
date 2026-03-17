@@ -77,8 +77,8 @@ function renderDevices(devices) {
         main.innerHTML = `
             <div class="empty">
                 <div class="empty-icon">&#x1F3A7;</div>
-                <h3>No Poly devices found</h3>
-                <p>Connect a Poly/Plantronics headset or speakerphone via USB</p>
+                <h3>No devices found</h3>
+                <p>Connect a Poly or Plantronics headset via USB to get started</p>
                 <br>
                 <button onclick="refreshDevices()">Scan Again</button>
             </div>`;
@@ -86,8 +86,8 @@ function renderDevices(devices) {
     }
 
     let html = `
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px">
-            <div class="section-title">Connected Devices (${devices.length})</div>
+        <div class="section-header">
+            <div class="section-title">${devices.length} Device${devices.length > 1 ? 's' : ''} Connected</div>
             <button onclick="refreshDevices()">Refresh</button>
         </div>
         <div class="device-grid">`;
@@ -197,7 +197,7 @@ function renderUpdates(updates) {
     }
 
     let html = `
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px">
+        <div class="section-header">
             <div class="section-title">Firmware Updates</div>
             <button onclick="loadUpdates()">Recheck</button>
         </div>
@@ -596,7 +596,7 @@ function renderDeviceSettings(devId, settings) {
     let html = '<div class="settings-grid">';
 
     for (const s of settings) {
-        const readOnly = s.read_only || false;
+        const readOnly = s.read_only || (s.writable === false);
         html += `<div class="setting-row">`;
         html += `<div class="setting-label">${esc(s.name)}</div>`;
 

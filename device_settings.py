@@ -361,37 +361,108 @@ def br_write_setting(h, name, value, report_size=64):
 
 
 def _read_dect_status(h):
-    """Read status from DECT device via sign-on + settings report.
-    Settings report (RID 0x0E) is read-only and arrives after sign-on.
-    Returns list of read-only status entries."""
-    import signal as _signal
+    """Read status from DECT device via feature reports and sign-on.
 
+    Savi 7300/8200 series have rich feature reports:
+      FR 15: Device state, PID, battery bytes
+      FR 72: Product part number (base)
+      FR 73: Product part number (headset)
+    Some devices also respond to RID 13 sign-on with a settings report (RID 14).
+    """
     results = []
 
-    # Need sign-on to get the settings report
-    def _timeout(signum, frame):
-        raise TimeoutError()
-
-    old = _signal.signal(_signal.SIGALRM, _timeout)
-    _signal.alarm(3)
+    # ── Read feature reports (no sign-on needed) ──
     try:
-        h.write(bytes([0x0D, 0x15]))  # sign on
-        _signal.alarm(0)
-    except (TimeoutError, Exception):
-        _signal.alarm(0)
-        _signal.signal(_signal.SIGALRM, old)
-        return results
-    _signal.signal(_signal.SIGALRM, old)
+        fr15 = h.get_feature_report(15, 64)
+        if fr15 and len(fr15) >= 29:
+            # Decode FR 15 fields
+            # Bytes 20-21: PID (LE)
+            if len(fr15) > 21:
+                pid = (fr15[21] << 8) | fr15[20]
+                results.append({"name": "PID", "value": f"0x{pid:04X}",
+                                "type": "text", "writable": False})
 
-    # Read responses for 3 seconds
+            # Bytes 24-27: battery levels (0x7F = unavailable)
+            batt_labels = ["Battery (Main)", "Battery (Left)", "Battery (Right)", "Battery (Case)"]
+            for i, label in enumerate(batt_labels):
+                idx = 24 + i
+                if idx < len(fr15) and fr15[idx] != 0x7F and 0 < fr15[idx] <= 100:
+                    results.append({"name": label, "value": fr15[idx],
+                                    "type": "range", "min": 0, "max": 100,
+                                    "writable": False})
+
+            # Byte 28: report size
+            if len(fr15) > 28 and fr15[28] > 0:
+                results.append({"name": "Report Size", "value": fr15[28],
+                                "type": "text", "writable": False})
+    except Exception:
+        pass
+
+    # ── Read product info (FR 72/73) ──
+    for rid, label in [(72, "Base Part Number"), (73, "Headset Part Number")]:
+        try:
+            data = h.get_feature_report(rid, 64)
+            if data and len(data) > 1:
+                # ASCII text, terminated by \x00 or non-printable byte
+                raw = bytes(data[1:])
+                text = ""
+                for b in raw:
+                    if 32 <= b < 127:
+                        text += chr(b)
+                    elif b == 0x2C:  # comma
+                        text += ","
+                    elif text:
+                        break  # stop at first non-printable after text starts
+                if text and len(text) > 3:
+                    results.append({"name": label, "value": text,
+                                    "type": "text", "writable": False})
+        except Exception:
+            pass
+
+    # ── Try sign-on for settings report (RID 14) ──
+    # Use threading timeout instead of SIGALRM (works in non-main threads)
+    import threading
+
+    write_ok = [False]
+    def _do_write():
+        try:
+            h.write(bytes([0x0D, 0x15]))
+            write_ok[0] = True
+        except Exception:
+            pass
+
+    t = threading.Thread(target=_do_write, daemon=True)
+    t.start()
+    t.join(timeout=3)
+
+    if not write_ok[0]:
+        return results if results else [{"name": "Note",
+            "value": "Device requires USB reset for full access",
+            "type": "text", "writable": False}]
+
+    # Read responses
     h.set_nonblocking(1)
-    settings_data = None
     deadline = time.time() + 3
     while time.time() < deadline:
         data = h.read(256)
-        if data and data[0] == 0x0E and len(data) >= 11:
-            settings_data = bytes(data)
-            break
+        if data:
+            rid = data[0]
+            if rid == 0x0E and len(data) >= 3:
+                # Settings report
+                fw = (data[2] << 8) | data[1]  # LE
+                fw_str = f"{fw >> 8}.{fw & 0xFF}"
+                results.append({"name": "Firmware Version", "value": fw_str,
+                                "type": "text", "writable": False})
+                if len(data) > 10:
+                    connected = bool(data[10] & 0x01)
+                    results.append({"name": "Headset Connected", "value": connected,
+                                    "type": "bool", "writable": False})
+                break
+            elif rid == 0x02:
+                # Sign-on response — only capture once
+                if len(data) >= 2 and not any(s["name"] == "Signed On" for s in results):
+                    results.append({"name": "Signed On", "value": True,
+                                    "type": "bool", "writable": False})
         time.sleep(0.01)
 
     # Sign off
@@ -400,20 +471,8 @@ def _read_dect_status(h):
     except Exception:
         pass
 
-    if settings_data:
-        d = settings_data
-        # Decode known fields
-        fw = (d[2] << 8) | d[1]  # LE
-        fw_str = f"{fw >> 8}.{fw & 0xFF}"
-        results.append({"name": "Firmware Version", "value": fw_str,
-                        "type": "text", "writable": False})
-
-        if len(d) > 10:
-            connected = bool(d[10] & 0x01)
-            results.append({"name": "Headset Connected", "value": connected,
-                            "type": "bool", "writable": False})
-
-        results.append({"name": "Note", "value": "Settings require DECT base station",
+    if not results:
+        results.append({"name": "Note", "value": "No data available — try USB reset",
                         "type": "text", "writable": False})
 
     return results
@@ -482,8 +541,6 @@ def read_all_settings(path, usage_page, dfu_executor=""):
 
     family = get_device_family(usage_page, dfu_executor)
     defs = get_settings_for_device(usage_page, dfu_executor)
-    if not defs:
-        return []
 
     h = None
     try:
@@ -495,8 +552,8 @@ def read_all_settings(path, usage_page, dfu_executor=""):
 
     results = []
 
-    # For DECT devices connected directly via USB, read what we can
-    # from the sign-on settings report (RID 0x0E)
+    # For DECT devices, read status from feature reports + sign-on
+    # (these don't use SETTINGS_DB — they read device-specific data directly)
     if family == "dect":
         results = _read_dect_status(h)
         try:
