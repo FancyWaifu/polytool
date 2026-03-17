@@ -169,20 +169,32 @@ def api_updates():
 
 @app.route("/api/settings/<dev_id>")
 def api_settings_read(dev_id):
-    """Read all settings for a device."""
-    from device_settings import read_all_settings
+    """Read all settings for a device.
+
+    Tries Clockwork (Poly Lens local service) first for complete settings.
+    Falls back to direct HID if Clockwork isn't available.
+    """
     dev = _find_device_by_id(dev_id)
     if not dev:
         return jsonify({"error": "Device not found"}), 404
 
+    # Try Clockwork first
+    cw_settings = _clockwork_read_settings(dev)
+    if cw_settings is not None:
+        return jsonify({"device_id": dev_id, "settings": cw_settings, "source": "clockwork"})
+
+    # Fall back to direct HID
+    from device_settings import read_all_settings
     settings = read_all_settings(dev.path, dev.usage_page, dev.dfu_executor)
-    return jsonify({"device_id": dev_id, "settings": settings})
+    return jsonify({"device_id": dev_id, "settings": settings, "source": "hid"})
 
 
 @app.route("/api/settings/<dev_id>", methods=["POST"])
 def api_settings_write(dev_id):
-    """Write a setting to a device."""
-    from device_settings import write_setting
+    """Write a setting to a device.
+
+    Tries Clockwork first, falls back to direct HID.
+    """
     dev = _find_device_by_id(dev_id)
     if not dev:
         return jsonify({"error": "Device not found"}), 404
@@ -194,8 +206,114 @@ def api_settings_write(dev_id):
     if not name:
         return jsonify({"error": "Setting name required"}), 400
 
+    # Try Clockwork first
+    success = _clockwork_write_setting(dev, name, value)
+    if success is not None:
+        return jsonify({"success": success, "name": name, "value": value, "source": "clockwork"})
+
+    # Fall back to direct HID
+    from device_settings import write_setting
     success = write_setting(dev.path, dev.usage_page, dev.dfu_executor, name, value)
-    return jsonify({"success": success, "name": name, "value": value})
+    return jsonify({"success": success, "name": name, "value": value, "source": "hid"})
+
+
+# ── Clockwork Integration ─────────────────────────────────────────────────────
+
+_clockwork_conn = None
+_clockwork_devices = {}  # device_id → clockwork device_id mapping
+
+
+def _get_clockwork():
+    """Get or create a Clockwork connection. Returns None if unavailable."""
+    global _clockwork_conn, _clockwork_devices
+
+    if _clockwork_conn is not None:
+        return _clockwork_conn
+
+    try:
+        from clockwork_client import ClockworkConnection, get_socket_path
+        socket_path = get_socket_path()
+        if not socket_path:
+            return None
+
+        cw = ClockworkConnection()
+        cw.connect(socket_path)
+        cw.handshake()
+        cw.collect_devices(timeout=3)
+
+        if cw.devices:
+            _clockwork_conn = cw
+            # Map our device IDs to Clockwork device IDs
+            _clockwork_devices = {}
+            for cw_id, cw_dev in cw.devices.items():
+                # Match by PID or serial
+                cw_pid = cw_dev.get("product_id", "")
+                cw_serial = cw_dev.get("serial_number", "")
+                devices = _get_cached_devices()
+                for d in devices:
+                    if (cw_serial and cw_serial == d.serial) or \
+                       (cw_pid and str(d.pid) == str(cw_pid)):
+                        _clockwork_devices[d.id] = cw_id
+                        break
+            return cw
+    except Exception:
+        pass
+    return None
+
+
+def _clockwork_read_settings(dev):
+    """Read settings via Clockwork. Returns list of settings or None."""
+    from clockwork_client import ALL_KNOWN_SETTINGS
+
+    cw = _get_clockwork()
+    if not cw:
+        return None
+
+    cw_device_id = _clockwork_devices.get(dev.id)
+    if not cw_device_id:
+        return None
+
+    settings = []
+    for name in ALL_KNOWN_SETTINGS:
+        try:
+            value = cw.request_setting(cw_device_id, name)
+            if value is not None:
+                # Determine type
+                if isinstance(value, bool):
+                    stype = "bool"
+                elif isinstance(value, (int, float)):
+                    stype = "range"
+                else:
+                    stype = "choice" if value in (
+                        "Default", "Bass Boost", "Bright", "Warm",
+                        "Ignore", "Ring", "Last Number Redial",
+                    ) else "text"
+
+                entry = {"name": name, "value": value, "type": stype, "writable": True}
+                if stype == "range":
+                    entry["min"] = 0
+                    entry["max"] = 10
+                settings.append(entry)
+        except Exception:
+            pass
+
+    return settings if settings else None
+
+
+def _clockwork_write_setting(dev, name, value):
+    """Write a setting via Clockwork. Returns True/False or None if unavailable."""
+    cw = _get_clockwork()
+    if not cw:
+        return None
+
+    cw_device_id = _clockwork_devices.get(dev.id)
+    if not cw_device_id:
+        return None
+
+    try:
+        return cw.write_setting(cw_device_id, name, value)
+    except Exception:
+        return None
 
 
 @app.route("/api/firmware/library")
