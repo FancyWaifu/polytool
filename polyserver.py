@@ -6,10 +6,13 @@ Receives device reports from agents running on workstations,
 stores inventory in SQLite, enforces policies, and provides
 an admin dashboard for fleet-wide headset management.
 
+Requires PostgreSQL. Set connection via --db flag or POLYSERVER_DB env var.
+
 Usage:
-  python3 polyserver.py                    # Start on port 8421
-  python3 polyserver.py --port 9000        # Custom port
-  python3 polyserver.py --init             # Initialize database
+  python3 polyserver.py                                              # localhost:5432/polytool
+  python3 polyserver.py --db postgresql://user:pass@host/polytool     # Custom connection
+  python3 polyserver.py --port 9000                                  # Custom port
+  python3 polyserver.py --init                                       # Initialize database only
 
 API Endpoints:
   POST /api/agent/report      Agent sends device inventory
@@ -32,7 +35,6 @@ import json
 import os
 import sys
 import time
-import sqlite3
 import hashlib
 import secrets
 import hmac
@@ -49,7 +51,6 @@ except ImportError:
 # ── Config ────────────────────────────────────────────────────────────────
 
 DATA_DIR = Path.home() / ".polytool" / "server"
-DB_PATH = DATA_DIR / "polytool.db"
 CONFIG_PATH = DATA_DIR / "server.json"
 WEB_DIR = Path(__file__).parent / "web_admin"
 
@@ -187,8 +188,7 @@ def validate_agent_report(data):
 #   PostgreSQL: postgresql://user:pass@host:5432/polytool
 #   SQLite:     sqlite:///path/to/db  or  (empty for default)
 
-_db_url = os.environ.get("POLYSERVER_DB", "")
-_use_postgres = False
+_db_url = os.environ.get("POLYSERVER_DB", "postgresql://localhost:5432/polytool")
 
 try:
     import psycopg2
@@ -213,29 +213,16 @@ class DBRow(dict):
 
 
 def get_db():
-    """Get a database connection. Returns (conn, is_postgres)."""
-    if _use_postgres:
-        conn = psycopg2.connect(_db_url)
-        return conn
-    else:
-        conn = sqlite3.connect(str(DB_PATH))
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        return conn
+    """Get a PostgreSQL connection."""
+    return psycopg2.connect(_db_url)
 
 
 def db_execute(conn, sql, params=None):
-    """Execute SQL with parameter placeholder translation for PG vs SQLite."""
-    if _use_postgres:
-        # Convert ? placeholders to %s for psycopg2
-        sql = sql.replace("?", "%s")
-        # Convert SQLite functions to PostgreSQL
-        sql = sql.replace("datetime('now')", "NOW()")
-        sql = sql.replace("datetime('now', '-5 minutes')", "NOW() - INTERVAL '5 minutes'")
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    else:
-        cur = conn.cursor()
-
+    """Execute SQL, converting ? placeholders to %s for psycopg2."""
+    sql = sql.replace("?", "%s")
+    sql = sql.replace("datetime('now')", "NOW()")
+    sql = sql.replace("datetime('now', '-5 minutes')", "NOW() - INTERVAL '5 minutes'")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     if params:
         cur.execute(sql, params)
     else:
@@ -246,187 +233,100 @@ def db_execute(conn, sql, params=None):
 def db_fetchall(conn, sql, params=None):
     """Execute and fetch all rows as list of dicts."""
     cur = db_execute(conn, sql, params)
-    rows = cur.fetchall()
-    if _use_postgres:
-        return [DBRow(r) for r in rows]
-    else:
-        return [DBRow(dict(r)) for r in rows]
+    return [DBRow(r) for r in cur.fetchall()]
 
 
 def db_fetchone(conn, sql, params=None):
     """Execute and fetch one row."""
     cur = db_execute(conn, sql, params)
     row = cur.fetchone()
-    if row is None:
-        return None
-    if _use_postgres:
-        return DBRow(row)
-    return DBRow(dict(row))
+    return DBRow(row) if row else None
 
 
 def init_db():
-    """Initialize database schema."""
+    """Initialize PostgreSQL database schema."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    if _use_postgres:
-        conn = psycopg2.connect(_db_url)
-        cur = conn.cursor()
+    conn = psycopg2.connect(_db_url)
+    cur = conn.cursor()
 
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS agents (
-                agent_id TEXT PRIMARY KEY,
-                hostname TEXT,
-                username TEXT,
-                platform TEXT,
-                ip_address TEXT,
-                agent_version TEXT,
-                last_seen TIMESTAMP,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS devices (
-                id SERIAL PRIMARY KEY,
-                agent_id TEXT REFERENCES agents(agent_id),
-                pid TEXT,
-                pid_hex TEXT,
-                serial TEXT,
-                product_name TEXT,
-                friendly_name TEXT,
-                firmware TEXT,
-                category TEXT,
-                dfu_executor TEXT,
-                family TEXT,
-                battery_level INTEGER DEFAULT -1,
-                last_seen TIMESTAMP,
-                first_seen TIMESTAMP DEFAULT NOW(),
-                settings_json TEXT DEFAULT '{}',
-                UNIQUE(agent_id, serial, pid)
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS policies (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT DEFAULT '',
-                target_pid TEXT DEFAULT '*',
-                target_category TEXT DEFAULT '*',
-                policy_type TEXT NOT NULL,
-                policy_value TEXT NOT NULL,
-                enabled INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS commands (
-                id SERIAL PRIMARY KEY,
-                agent_id TEXT,
-                device_serial TEXT DEFAULT '*',
-                device_pid TEXT DEFAULT '*',
-                command_type TEXT NOT NULL,
-                command_data TEXT NOT NULL,
-                status TEXT DEFAULT 'pending',
-                result TEXT DEFAULT '',
-                created_at TIMESTAMP DEFAULT NOW(),
-                completed_at TIMESTAMP,
-                FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id SERIAL PRIMARY KEY,
-                timestamp TIMESTAMP DEFAULT NOW(),
-                agent_id TEXT,
-                device_serial TEXT,
-                action TEXT,
-                detail TEXT
-            )
-        """)
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_devices_agent ON devices(agent_id)")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_devices_pid ON devices(pid)")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_commands_agent ON commands(agent_id, status)")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp)")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS agents (
+            agent_id TEXT PRIMARY KEY,
+            hostname TEXT,
+            username TEXT,
+            platform TEXT,
+            ip_address TEXT,
+            agent_version TEXT,
+            last_seen TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS devices (
+            id SERIAL PRIMARY KEY,
+            agent_id TEXT REFERENCES agents(agent_id),
+            pid TEXT,
+            pid_hex TEXT,
+            serial TEXT,
+            product_name TEXT,
+            friendly_name TEXT,
+            firmware TEXT,
+            category TEXT,
+            dfu_executor TEXT,
+            family TEXT,
+            battery_level INTEGER DEFAULT -1,
+            last_seen TIMESTAMP,
+            first_seen TIMESTAMP DEFAULT NOW(),
+            settings_json TEXT DEFAULT '{}',
+            UNIQUE(agent_id, serial, pid)
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS policies (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            target_pid TEXT DEFAULT '*',
+            target_category TEXT DEFAULT '*',
+            policy_type TEXT NOT NULL,
+            policy_value TEXT NOT NULL,
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS commands (
+            id SERIAL PRIMARY KEY,
+            agent_id TEXT,
+            device_serial TEXT DEFAULT '*',
+            device_pid TEXT DEFAULT '*',
+            command_type TEXT NOT NULL,
+            command_data TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            result TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT NOW(),
+            completed_at TIMESTAMP,
+            FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMP DEFAULT NOW(),
+            agent_id TEXT,
+            device_serial TEXT,
+            action TEXT,
+            detail TEXT
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_devices_agent ON devices(agent_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_devices_pid ON devices(pid)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_commands_agent ON commands(agent_id, status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp)")
 
-        conn.commit()
-        conn.close()
-        print(f"  PostgreSQL database initialized")
-
-    else:
-        conn = get_db()
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS agents (
-                agent_id TEXT PRIMARY KEY,
-                hostname TEXT,
-                username TEXT,
-                platform TEXT,
-                ip_address TEXT,
-                agent_version TEXT,
-                last_seen TEXT,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS devices (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_id TEXT,
-                pid TEXT,
-                pid_hex TEXT,
-                serial TEXT,
-                product_name TEXT,
-                friendly_name TEXT,
-                firmware TEXT,
-                category TEXT,
-                dfu_executor TEXT,
-                family TEXT,
-                battery_level INTEGER DEFAULT -1,
-                last_seen TEXT,
-                first_seen TEXT DEFAULT (datetime('now')),
-                settings_json TEXT DEFAULT '{}',
-                UNIQUE(agent_id, serial, pid),
-                FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
-            );
-
-            CREATE TABLE IF NOT EXISTS policies (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                description TEXT DEFAULT '',
-                target_pid TEXT DEFAULT '*',
-                target_category TEXT DEFAULT '*',
-                policy_type TEXT NOT NULL,
-                policy_value TEXT NOT NULL,
-                enabled INTEGER DEFAULT 1,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS commands (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_id TEXT,
-                device_serial TEXT DEFAULT '*',
-                device_pid TEXT DEFAULT '*',
-                command_type TEXT NOT NULL,
-                command_data TEXT NOT NULL,
-                status TEXT DEFAULT 'pending',
-                result TEXT DEFAULT '',
-                created_at TEXT DEFAULT (datetime('now')),
-                completed_at TEXT,
-                FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
-            );
-
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT DEFAULT (datetime('now')),
-                agent_id TEXT,
-                device_serial TEXT,
-                action TEXT,
-                detail TEXT
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_devices_agent ON devices(agent_id);
-            CREATE INDEX IF NOT EXISTS idx_devices_pid ON devices(pid);
-            CREATE INDEX IF NOT EXISTS idx_commands_agent ON commands(agent_id, status);
-        """)
-        conn.commit()
-        conn.close()
-        print(f"  SQLite database at {DB_PATH}")
+    conn.commit()
+    conn.close()
 
 
 # ── Agent API ─────────────────────────────────────────────────────────────
@@ -815,17 +715,14 @@ def main():
     args = parser.parse_args()
 
     # Configure database backend
-    global _db_url, _use_postgres
-    _db_url = args.db
-    if _db_url.startswith("postgresql://") or _db_url.startswith("postgres://"):
-        if not _has_psycopg2:
-            print("Error: psycopg2 required for PostgreSQL. Install with: pip install psycopg2-binary")
-            sys.exit(1)
-        _use_postgres = True
-        print(f"  Database: PostgreSQL")
-    else:
-        _use_postgres = False
-        print(f"  Database: SQLite")
+    global _db_url
+    if args.db:
+        _db_url = args.db
+    if not _has_psycopg2:
+        print("Error: psycopg2 required. Install with: pip install psycopg2-binary")
+        sys.exit(1)
+    db_display = _db_url.split("@")[-1] if "@" in _db_url else _db_url
+    print(f"  Database: PostgreSQL ({db_display})")
 
     init_db()
 
