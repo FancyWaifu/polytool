@@ -89,6 +89,11 @@ class LensServer:
     def accept_clients(self):
         """Accept client connections in a loop."""
         self.server_sock.settimeout(1)
+
+        # Start device scanner thread
+        scanner = threading.Thread(target=self._device_scanner, daemon=True)
+        scanner.start()
+
         while self.running:
             try:
                 client_sock, addr = self.server_sock.accept()
@@ -102,6 +107,46 @@ class LensServer:
                 continue
             except OSError:
                 break
+
+    def _device_scanner(self):
+        """Periodically scan for new/removed devices and push events."""
+        while self.running:
+            time.sleep(5)
+            try:
+                old_ids = set(self.devices.keys())
+                current_ids = self.discover_devices()
+                new_ids = current_ids if current_ids else set(self.devices.keys())
+
+                # New devices
+                for did in new_ids - old_ids:
+                    dev = self.devices[did]
+                    clean_dev = {k: v for k, v in dev.items() if not k.startswith("_")}
+                    print(f"  ++ Device added: {dev.get('productName', '?')}")
+                    self.broadcast({
+                        "type": "DeviceAttached",
+                        "apiVersion": API_VERSION,
+                        "device": clean_dev,
+                    })
+                    # Also fetch and push product images
+                    image_data = self.get_product_images(did)
+                    if image_data:
+                        self.broadcast({
+                            "type": "DeviceSetting",
+                            "apiVersion": API_VERSION,
+                            "deviceId": did,
+                            "setting": {"name": "Product Images", "value": image_data},
+                        })
+
+                # Removed devices
+                for did in old_ids - new_ids:
+                    print(f"  -- Device removed: {did}")
+                    self.broadcast({
+                        "type": "DeviceDetached",
+                        "apiVersion": API_VERSION,
+                        "deviceId": did,
+                    })
+            except Exception as e:
+                print(f"  Scanner error: {e}")
 
     def handle_client(self, client_sock):
         """Handle one client connection."""
@@ -493,15 +538,22 @@ class LensServer:
         return None
 
     def discover_devices(self):
-        """Scan for Poly devices using our polytool code."""
+        """Scan for Poly devices. Returns set of current device IDs."""
         try:
             from polytool import discover_devices, try_read_device_info, try_read_battery
             raw_devices = discover_devices()
+            current_ids = set()
             for dev in raw_devices:
                 try_read_device_info(dev)
                 try_read_battery(dev)
 
                 device_id = dev.id
+                current_ids.add(device_id)
+
+                # Only add if new (don't overwrite existing — preserves state)
+                if device_id in self.devices:
+                    continue
+
                 self.devices[device_id] = {
                     # camelCase — matches .NET JsonSerializer default naming
                     "deviceId": device_id,
@@ -540,10 +592,15 @@ class LensServer:
                     },
                 }
 
-            return len(self.devices)
+            # Remove devices no longer present
+            removed = set(self.devices.keys()) - current_ids
+            for did in removed:
+                del self.devices[did]
+
+            return current_ids
         except Exception as e:
             print(f"  Device discovery error: {e}")
-            return 0
+            return set()
 
     def read_device_settings(self, device_id):
         """Read settings for a device via our HID code."""
@@ -600,8 +657,8 @@ def main():
 
     # Discover devices
     print(f"\n  Scanning for devices...")
-    count = server.discover_devices()
-    print(f"  Found {count} device(s)")
+    ids = server.discover_devices()
+    print(f"  Found {len(ids)} device(s)")
     for did, dev in server.devices.items():
         print(f"    {dev['productName']} (fw {dev['firmwareVersion']})")
 
