@@ -230,15 +230,58 @@ RID 88 (0x58) on FF58:
   Spontaneous event during FWU: 58 10 00 0D 00 00 00 67 F0 7E FF 04 00 03 15
   May carry headset status/battery via DECT relay
 
-SETTINGS WRITE: NOT YET FOUND
-  Tried:
+SETTINGS WRITE: FOUND — via legacyhost NativeLoader IPC
+  NOT accessible via direct USB HID. All HID attempts failed:
     - 0x4001 with modified settings blob → silently accepted, no change
+    - 0x4010, 0x4012, 0x4200-0x4210 → no responses
     - 0x4900-0x4B10 range → no responses
     - BladeRunner on all interfaces (FFA0/FFA1/FFA2/FF58) → no handshake
     - RID 0x0E output report → accepted silently, no effect
-    - FR 0x0E feature report write → read error
-  Settings likely written through legacyhost DECT management protocol
-  (not accessible via raw USB HID without the Poly Lens stack)
+    - FR 0x0E / FR 154 feature report write → no effect
+    - RID 13 with various mode bits (0x05-0x35) → only sign-on responses
+
+  Protocol chain (captured from Poly Lens logs):
+    Poly Studio → LCS (SetDeviceSetting over TCP/SOH)
+      → Clockwork (DEVICE_REQUEST over POSIX socket)
+        → LegacyHost (JSON IPC, 4-byte LE length-prefix)
+          → NativeLoader_SendToNative (JSON with hex setting IDs)
+            → Native dylib → USB HID (proprietary DECT protocol)
+
+  NativeLoader JSON format:
+    {"messageType":"SetDeviceSettings","payload":{"deviceId":"<int64>",
+     "settings":[{"id":"0x601","value":"true"}]},"trackId":"<int>"}
+
+  DECT SETTING ID MAP (25 settings captured):
+    0x102   Second Incoming Call     (ignore, once, continuous)
+    0x103   Computer Volume          (low, off, standard)
+    0x104   Desk Phone Volume        (low, off, standard)
+    0x106   VoIP Interface Ringtone  (sound1, sound2, sound3)
+    0x107   Desk Phone               (off, sound2)
+    0x10a   Base Ringer Volume       (medium, high, off)
+    0x300   Auto-Answer (No Sensor)  (true, false)
+    0x400   Default Line Type        (mobile, pstn, voip)
+    0x500   Noise Exposure           (85db, 80db, off)
+    0x501   Hours on Phone Per Day   (numeric string)
+    0x504   Anti-Startle             (true, false)
+    0x505   Anti Startle             (true, false)
+    0x601   Answering Call           (true, false)
+    0x603   Mute Reminder Time       (numeric string)
+    0x607   Mute On/Off Alerts       (doubleTone, singleTone, voice)
+    0x608   System Tone Volume       (low, off, standard)
+    0x609   Volume Level Tones       (minMaxOnly, atEveryLevel)
+    0x60c   Active Audio Tone        (true, false)
+    0x700   DECT Density             (enterpriseMode, mono, homeMode)
+    0x701   OTA Subscription         (true, false)
+    0x702   Power Level              (high, low, medium)
+    0x802   Multiband Expander       (no, moderate, agressive)
+    0x902   Online Indicator         (true, false)
+    0xa00   Enable Audio Sensing     (true, false)
+    0xa01   Dialtone On/Off          (true, false)
+    0xfff4  Keep Link Up             (true, false)
+
+  Implementation: proxy DECT writes through real LCS when available.
+  LensServer saves original LCS port and creates a LensAPI client to
+  forward SetDeviceSetting to the real Poly stack.
 
 
 ================================================================================

@@ -120,16 +120,18 @@ def get_settings_for_device(usage_page, dfu_executor=""):
     return DEVICE_PROFILES.get(family, DECT_SETTINGS)
 
 
-def settings_to_api_format(settings_defs, current_values=None, family=None):
+def settings_to_api_format(settings_defs, current_values=None, family=None,
+                           force_writable=False):
     """Convert settings definitions to LensServiceApi format.
 
     Returns (metadata_list, settings_list) tuple.
-    family: device family string — DECT settings are marked read-only.
+    family: device family string — DECT settings are marked read-only unless
+            force_writable=True (used when LCS proxy is available for writes).
     """
     if current_values is None:
         current_values = {}
 
-    read_only = family not in WRITABLE_FAMILIES if family else False
+    read_only = (family not in WRITABLE_FAMILIES and not force_writable) if family else False
 
     metadata = []
     values = []

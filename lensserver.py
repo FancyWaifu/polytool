@@ -462,7 +462,11 @@ class LensServer:
         settings_defs = get_settings_for_device(usage_page, dfu_executor)
         current_values = self._device_settings_cache.get(device_id, {})
 
-        return settings_to_api_format(settings_defs, current_values, family=family)
+        # DECT settings are writable when real LCS is available for proxy
+        force_writable = (family == "dect" and self._original_port is not None)
+
+        return settings_to_api_format(settings_defs, current_values, family=family,
+                                      force_writable=force_writable)
 
     def on_get_dfu_status(self, msg, client_sock):
         """Handle GetDeviceDFUStatus."""
@@ -684,12 +688,22 @@ class LensServer:
             print(f"  HID settings read failed for {device_id}: {e}")
 
     def write_device_setting(self, device_id, name, value):
-        """Write a setting via our HID code."""
+        """Write a setting to device. Uses direct HID for CX2070x/BladeRunner,
+        proxies through real LCS for DECT devices."""
         dev = self.devices.get(device_id, {})
         ptd = dev.get("_polytool_dev", {})
         if not ptd:
             return False
 
+        from device_settings import get_device_family
+        family = get_device_family(
+            ptd.get("usage_page", 0), ptd.get("dfu_executor", ""))
+
+        # DECT: proxy through real Poly Lens Control Service
+        if family == "dect":
+            return self._proxy_dect_write(device_id, name, value)
+
+        # CX2070x / BladeRunner: direct HID write
         try:
             from device_settings import write_setting
             return write_setting(
@@ -700,6 +714,71 @@ class LensServer:
             )
         except Exception as e:
             print(f"  Settings write error: {e}")
+            return False
+
+    # ── DECT LCS Proxy ───────────────────────────────────────────────────────
+    _lcs_client = None
+
+    def _get_lcs_client(self):
+        """Get a LensAPI client connected to the REAL Poly LCS."""
+        if not self._original_port:
+            return None
+        try:
+            port = int(self._original_port)
+        except (ValueError, TypeError):
+            return None
+
+        # Test if existing client is still alive
+        if self._lcs_client:
+            try:
+                self._lcs_client.sock.getpeername()
+                return self._lcs_client
+            except Exception:
+                self._lcs_client = None
+
+        # Connect fresh
+        try:
+            from lensapi import LensAPIClient
+            client = LensAPIClient()
+            client.connect(port=port)
+            client.register()
+            # Drain registration responses
+            client.recv_all(timeout=1.0)
+            self._lcs_client = client
+            print(f"  Connected to real LCS on port {port} for DECT proxy")
+            return client
+        except Exception as e:
+            print(f"  Cannot connect to real LCS (port {port}): {e}")
+            return None
+
+    def _proxy_dect_write(self, device_id, name, value):
+        """Proxy a DECT setting write through the real Poly LCS."""
+        client = self._get_lcs_client()
+        if not client:
+            print(f"  DECT write failed: real Poly LCS not available")
+            print(f"  (DECT settings require Poly Lens legacyhost to be running)")
+            return False
+
+        # Map our short device ID to the PLT_ format used by real LCS
+        dev = self.devices.get(device_id, {})
+        serial = dev.get("serialNumber", device_id)
+        lcs_device_id = f"PLT_{serial}"
+
+        try:
+            result = client.set_device_setting(lcs_device_id, name, value)
+            # Read back responses
+            responses = client.recv_all(timeout=2.0)
+            # Check for success
+            for msg in responses:
+                if msg.get("type") == "DeviceSettingUpdated":
+                    print(f"  DECT proxy: {name} = {value} [OK via LCS]")
+                    return True
+            # If we got here without error, assume success
+            print(f"  DECT proxy: {name} = {value} [sent to LCS]")
+            return True
+        except Exception as e:
+            print(f"  DECT proxy error: {e}")
+            self._lcs_client = None
             return False
 
 
