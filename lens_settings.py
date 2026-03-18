@@ -104,32 +104,83 @@ BLADERUNNER_SETTINGS = [
     {"name": "Language Selection", "type": "enum", "choices": ["English", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Swedish", "Norwegian", "Danish", "Finnish", "Japanese", "Korean", "Mandarin", "Cantonese", "Russian"], "default": "English"},
 ]
 
-# Device family → (settings profile, read_only flag)
-# DECT settings are read-only: the DECT base station write protocol
-# has not been reverse-engineered yet. CX2070x and BladeRunner support writes.
+VOYAGER_BT_SETTINGS = [
+    # ── General ──
+    {"name": "Answering Call", "type": "bool", "default": True},
+    {"name": "Auto-Answer", "type": "bool", "default": False},
+    {"name": "Second Incoming Call", "type": "enum", "choices": ["ignore", "once", "continuous"], "default": "once"},
+    {"name": "Ring Tone", "type": "bool", "default": True},
+    {"name": "Online Indicator", "type": "bool", "default": True},
+    {"name": "Smart Audio Transfer", "type": "bool", "default": True},
+    {"name": "Call Announcement", "type": "bool", "default": True},
+    # ── Ringtones & Volume ──
+    {"name": "Sidetone", "type": "enum", "choices": ["low", "medium", "high"], "default": "medium"},
+    {"name": "Volume Level Tones", "type": "enum", "choices": ["atEveryLevel", "minMaxOnly"], "default": "minMaxOnly"},
+    {"name": "Volume Tone Min/Max", "type": "enum", "choices": ["tone", "voice"], "default": "voice"},
+    {"name": "Mute On/Off Alerts", "type": "enum", "choices": ["voice", "singleTone", "doubleTone"], "default": "voice"},
+    {"name": "Mute Alert", "type": "enum", "choices": ["off", "timed", "voiceAudible", "voiceVisible", "voiceVisibleAndAudible"], "default": "voiceAudible"},
+    {"name": "Mute Reminder Time", "type": "enum", "choices": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"], "default": "15"},
+    {"name": "Active Call Audio", "type": "bool", "default": True},
+    {"name": "Notification Tones", "type": "bool", "default": False},
+    # ── Wireless ──
+    {"name": "Audio Bandwidth Mobile", "type": "enum", "choices": ["narrowband", "wideband"], "default": "wideband"},
+    # ── Advanced / Audio ──
+    {"name": "Anti Startle 2", "type": "bool", "default": False},
+    {"name": "Noise Exposure", "type": "enum", "choices": ["off", "85db", "80db"], "default": "off"},
+    {"name": "Hours on Phone Per Day", "type": "enum", "choices": ["2", "4", "6", "8"], "default": "8"},
+    {"name": "TWA Reporting", "type": "bool", "default": False},
+    {"name": "TWA Reporting Period", "type": "enum", "choices": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], "default": "1"},
+    {"name": "Acoustic Incident Reporting", "type": "bool", "default": False},
+    {"name": "Conversation Dynamics Reporting", "type": "bool", "default": False},
+    {"name": "Conversation Dynamics Period", "type": "enum", "choices": ["1", "10", "20", "30", "40", "50", "60"], "default": "1"},
+    {"name": "Link Quality Reporting", "type": "bool", "default": False},
+]
+
+VOYAGER_BASE_SETTINGS = [
+    # ── Ringtones & Volume ──
+    {"name": "Computer Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
+    {"name": "Desk Phone Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
+    {"name": "VoIP Interface Ringtone", "type": "enum", "choices": ["sound1", "sound2", "sound3"], "default": "sound2"},
+    {"name": "Desk Phone", "type": "enum", "choices": ["sound1", "sound2", "sound3"], "default": "sound1"},
+    # ── General ──
+    {"name": "Default Line Type", "type": "enum", "choices": ["pstn", "voip"], "default": "voip"},
+    {"name": "Dialtone On/Off", "type": "bool", "default": True},
+]
+
+# Device family → settings profile
 DEVICE_PROFILES = {
     "dect": DECT_SETTINGS,
     "cx2070x": CX2070X_SETTINGS,
     "bladerunner": BLADERUNNER_SETTINGS,
+    "voyager_bt": VOYAGER_BT_SETTINGS,
+    "voyager_base": VOYAGER_BASE_SETTINGS,
 }
 
 WRITABLE_FAMILIES = {"cx2070x", "bladerunner"}
 
 
-def get_device_family(usage_page, dfu_executor=""):
-    """Determine device family from usage page and DFU executor."""
+# ── Voyager PIDs (Bluetooth docks) ──
+VOYAGER_BASE_PIDS = {0x02EA}  # Voyager Base-M CD
+
+
+def get_device_family(usage_page, dfu_executor="", pid=0):
+    """Determine device family from usage page, DFU executor, and PID."""
+    if pid in VOYAGER_BASE_PIDS:
+        return "voyager_base"
     if usage_page == 0xFFA0:
         return "cx2070x"
     if usage_page == 0xFFA2:
         return "dect"
     if dfu_executor in ("HidTiDfu", "SyncDfu", "StudioDfu"):
         return "bladerunner"
+    if dfu_executor in ("btNeoDfu",):
+        return "voyager_bt"
     return "dect"  # default
 
 
-def get_settings_for_device(usage_page, dfu_executor=""):
+def get_settings_for_device(usage_page, dfu_executor="", pid=0):
     """Get the settings profile for a device."""
-    family = get_device_family(usage_page, dfu_executor)
+    family = get_device_family(usage_page, dfu_executor, pid=pid)
     return DEVICE_PROFILES.get(family, DECT_SETTINGS)
 
 

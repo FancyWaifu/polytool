@@ -469,14 +469,15 @@ class LensServer:
         ptd = dev.get("_polytool_dev", {})
         usage_page = ptd.get("usage_page", 0)
         dfu_executor = ptd.get("dfu_executor", "")
-        family = get_device_family(usage_page, dfu_executor)
+        pid = ptd.get("pid", 0)
+        family = get_device_family(usage_page, dfu_executor, pid=pid)
 
-        settings_defs = get_settings_for_device(usage_page, dfu_executor)
+        settings_defs = get_settings_for_device(usage_page, dfu_executor, pid=pid)
         current_values = self._device_settings_cache.get(device_id, {})
 
-        # DECT settings are writable when native bridge is available
+        # DECT/Voyager settings are writable when native bridge is available
         force_writable = False
-        if family == "dect":
+        if family in ("dect", "voyager_bt", "voyager_base"):
             try:
                 from native_bridge import find_components_dir
                 force_writable = find_components_dir() is not None
@@ -652,6 +653,7 @@ class LensServer:
                         "path": dev.path,
                         "usage_page": dev.usage_page,
                         "dfu_executor": dev.dfu_executor,
+                        "pid": dev.pid,
                     },
                 }
 
@@ -707,18 +709,19 @@ class LensServer:
 
     def write_device_setting(self, device_id, name, value):
         """Write a setting to device. Uses direct HID for CX2070x/BladeRunner,
-        proxies through real LCS for DECT devices."""
+        native bridge for DECT/Voyager devices."""
         dev = self.devices.get(device_id, {})
         ptd = dev.get("_polytool_dev", {})
         if not ptd:
             return False
 
-        from device_settings import get_device_family
+        from lens_settings import get_device_family
         family = get_device_family(
-            ptd.get("usage_page", 0), ptd.get("dfu_executor", ""))
+            ptd.get("usage_page", 0), ptd.get("dfu_executor", ""),
+            pid=ptd.get("pid", 0))
 
-        # DECT: proxy through real Poly Lens Control Service
-        if family == "dect":
+        # DECT / Voyager: write through native bridge
+        if family in ("dect", "voyager_bt", "voyager_base"):
             return self._proxy_dect_write(device_id, name, value)
 
         # CX2070x / BladeRunner: direct HID write

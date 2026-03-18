@@ -217,6 +217,42 @@ class NativeBridge:
 
 # ── DECT Setting Name → Hex ID Map ──────────────────────────────────────────
 
+VOYAGER_SETTING_IDS = {
+    # Voyager 4320 / BT headset settings
+    "Second Incoming Call":        "0x102",
+    "Ring Tone":                   "0x109",
+    "Auto-Answer":                 "0x300",
+    "Noise Exposure":              "0x500",
+    "Hours on Phone Per Day":      "0x501",
+    "TWA Reporting Period":        "0x502",
+    "TWA Reporting":               "0x503",
+    "Anti Startle 2":              "0x505",
+    "Acoustic Incident Reporting": "0x507",
+    "Conversation Dynamics Period": "0x508",
+    "Conversation Dynamics Reporting": "0x509",
+    "Link Quality Reporting":      "0x50b",
+    "Answering Call":              "0x601",
+    "Mute Reminder Time":          "0x603",
+    "Mute On/Off Alerts":          "0x607",
+    "Volume Level Tones":          "0x609",
+    "Active Call Audio":           "0x60c",
+    "Mute Alert":                  "0x60d",
+    "Audio Bandwidth Mobile":      "0x708",
+    "Sidetone":                    "0x803",
+    "Notification Tones":          "0x805",
+    "Online Indicator":            "0x902",
+    "Smart Audio Transfer":        "0x90a",
+    "Call Announcement":           "0xb05",
+    "Volume Tone Min/Max":         "0xb06",
+    # Voyager Base-M CD settings
+    "Computer Volume":             "0x103",
+    "Desk Phone Volume":           "0x104",
+    "VoIP Interface Ringtone":     "0x106",
+    "Desk Phone":                  "0x107",
+    "Default Line Type":           "0x400",
+    "Dialtone On/Off":             "0xa01",
+}
+
 DECT_SETTING_IDS = {
     # General
     "Second Incoming Call":   "0x102",
@@ -255,8 +291,8 @@ DECT_SETTING_IDS = {
 
 
 def setting_name_to_id(name):
-    """Convert a Poly Studio setting name to its DECT hex ID."""
-    return DECT_SETTING_IDS.get(name)
+    """Convert a Poly Studio setting name to its native hex ID."""
+    return DECT_SETTING_IDS.get(name) or VOYAGER_SETTING_IDS.get(name)
 
 
 # ── Standalone Test ──────────────────────────────────────────────────────────
