@@ -168,11 +168,14 @@ class NativeBridge:
         except Exception as e:
             print(f"  ← Native (decode error): {e}")
 
+    _track_counter = 0
+
     def send(self, message_type, payload, track_id=None):
         """Send a JSON message to the native library."""
-        msg = {"messageType": message_type, "payload": payload}
-        if track_id is not None:
-            msg["trackId"] = str(track_id)
+        if track_id is None:
+            self._track_counter += 1
+            track_id = self._track_counter
+        msg = {"messageType": message_type, "payload": payload, "trackId": str(track_id)}
         data = json.dumps(msg).encode("utf-8")
         result = self._native_loader.NativeLoader_SendToNative(data)
         print(f"  → Native: {message_type} = {'OK' if result else 'FAIL'}")
