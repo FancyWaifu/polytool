@@ -36,6 +36,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 API_VERSION = "1.14.1"
+MSG_DELIM = "\x01"  # SOH byte — real LensService message separator (NOT newline)
 
 # Port file location
 PORT_FILE_DIR = Path.home() / "Library/Application Support/Poly/Lens Control Service"
@@ -106,6 +107,8 @@ class LensServer:
         """Handle one client connection."""
         buffer = ""
         client_sock.settimeout(1)
+        registered = False
+
 
         while self.running:
             try:
@@ -114,15 +117,35 @@ class LensServer:
                     break
                 buffer += data.decode("utf-8", errors="ignore")
 
-                while "\n" in buffer:
-                    line, buffer = buffer.split("\n", 1)
+                while MSG_DELIM in buffer:
+                    line, buffer = buffer.split(MSG_DELIM, 1)
                     if line.strip():
                         try:
                             msg = json.loads(line)
+                            msg_type = msg.get("type", "?")
+                            print(f"  ← {msg_type}: {json.dumps(msg)[:150]}")
+
+                            if msg_type in ("RegisterClient", "RegisterEndUserApplication") and not registered:
+                                registered = True
+                                self.on_register(msg, client_sock)
+                                # After registration, push system info
+                                self.send_msg(client_sock, {
+                                    "type": "SystemInformation",
+                                    "apiVersion": API_VERSION,
+                                    "systemName": os.uname().nodename,
+                                })
+                                self.send_msg(client_sock, {
+                                    "type": "LcsConfigurationInformation",
+                                    "apiVersion": API_VERSION,
+                                    "configurationFlavor": "Lens Desktop",
+                                })
+                                continue
+
                             response = self.handle_message(msg, client_sock)
                             if response:
                                 self.send_msg(client_sock, response)
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as e:
+                            print(f"  JSON error: {e} — raw: {line[:100]}")
                             pass
 
             except socket.timeout:
@@ -140,9 +163,9 @@ class LensServer:
             pass
 
     def send_msg(self, client_sock, msg):
-        """Send a JSON message to a client."""
+        """Send a JSON message to a client (SOH-delimited)."""
         try:
-            data = json.dumps(msg) + "\n"
+            data = json.dumps(msg) + MSG_DELIM
             client_sock.sendall(data.encode("utf-8"))
         except:
             pass
@@ -159,21 +182,35 @@ class LensServer:
 
         handlers = {
             "RegisterClient": self.on_register,
+            "RegisterEndUserApplication": self.on_register,
             "GetDeviceList": self.on_get_device_list,
             "GetDeviceSettings": self.on_get_device_settings,
             "GetDeviceSetting": self.on_get_device_setting,
             "SetDeviceSetting": self.on_set_device_setting,
             "GetDeviceSettingsMetadata": self.on_get_settings_metadata,
             "GetDeviceDFUStatus": self.on_get_dfu_status,
+            "GetDeviceLibraryVersion": self.on_get_library_version,
+            "GetSoftphonesList": self.on_get_softphones,
+            "GetPrimaryDevice": self.on_get_primary_device,
+            "RegisterSoftphones": self.on_register_softphones,
+            "GetAvailableSoftwareUpdate": self.on_get_software_update,
         }
 
         handler = handlers.get(msg_type)
         if handler:
-            return handler(msg, client_sock)
+            result = handler(msg, client_sock)
+            if result:
+                print(f"  → {result.get('type', '?')}")
+            return result
 
-        # Unknown message — log it
-        print(f"  Unknown message: {msg_type}")
-        return None
+        # Catch-all — respond to any unknown message with an empty ack
+        # This prevents the GUI from hanging waiting for a response
+        print(f"  Unknown: {msg_type} — {json.dumps(msg)[:150]}")
+        return {
+            "type": msg_type.replace("Get", "").replace("Set", "") if msg_type.startswith(("Get", "Set")) else "Error",
+            "apiVersion": API_VERSION,
+            "error": f"Not implemented: {msg_type}",
+        }
 
     # ── Message Handlers ──────────────────────────────────────────────
 
@@ -182,28 +219,38 @@ class LensServer:
         name = msg.get("name", "unknown")
         print(f"  Client registered: {name}")
 
-        # Send ClientRegistered
+        # Send ClientRegistered — tell client not to use encryption
         self.send_msg(client_sock, {
             "type": "ClientRegistered",
             "apiVersion": API_VERSION,
+            "serviceVersion": "1.14.1",
+            "serviceProductName": "Poly Lens Control Service",
+            "configurationFlavor": "Lens Desktop",
+            "displayName": "Poly Lens Control Service",
+            "useEncryption": False,
         })
 
-        # Send DeviceAttached for each known device
+        # Push DeviceAttached for each known device
         for did, dev in self.devices.items():
+            clean_dev = {k: v for k, v in dev.items() if not k.startswith("_")}
             self.send_msg(client_sock, {
                 "type": "DeviceAttached",
                 "apiVersion": API_VERSION,
-                "device": dev,
+                "device": clean_dev,
             })
+            print(f"  → DeviceAttached: {dev.get('productName', '?')}")
 
-        return None  # Already sent responses
+        return None
 
     def on_get_device_list(self, msg, client_sock):
         """Handle GetDeviceList."""
+        clean_devices = []
+        for dev in self.devices.values():
+            clean_devices.append({k: v for k, v in dev.items() if not k.startswith("_")})
         return {
             "type": "DeviceList",
             "apiVersion": API_VERSION,
-            "devices": list(self.devices.values()),
+            "devices": clean_devices,
         }
 
     def on_get_device_settings(self, msg, client_sock):
@@ -221,24 +268,46 @@ class LensServer:
         """Handle GetDeviceSetting."""
         device_id = msg.get("deviceId", "")
         name = msg.get("name", "")
-        settings = self.read_device_settings(device_id)
 
+        # Handle special built-in settings
+        dev = self.devices.get(device_id, {})
+
+        # Build a proper DeviceSetting response
+        # The GUI destructures: const {name} = setting
+        # So we need: {type: "DeviceSetting", setting: {name, value, ...}}
+        def make_setting_response(sname, svalue, **extra):
+            return {
+                "type": "DeviceSetting",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+                "setting": {
+                    "name": sname,
+                    "value": svalue,
+                    **extra,
+                },
+            }
+
+        if name == "Product Images":
+            return make_setting_response(name, None)
+
+        if name == "Ear Cushion Type":
+            return make_setting_response(name, None)
+
+        if name == "Device Info":
+            return make_setting_response(name, dev.get("firmwareVersion", ""),
+                valueCompound=[
+                    {"name": "sw_version", "value": dev.get("firmwareVersion", "")},
+                    {"name": "serial_number", "value": dev.get("serialNumber", "")},
+                    {"name": "product_name", "value": dev.get("productName", "")},
+                ])
+
+        # Try reading from HID
+        settings = self.read_device_settings(device_id)
         for s in settings:
             if s.get("name") == name:
-                return {
-                    "type": "DeviceSetting",
-                    "apiVersion": API_VERSION,
-                    "deviceId": device_id,
-                    **s,
-                }
+                return make_setting_response(name, s.get("value"))
 
-        return {
-            "type": "DeviceSetting",
-            "apiVersion": API_VERSION,
-            "deviceId": device_id,
-            "name": name,
-            "value": None,
-        }
+        return make_setting_response(name, None)
 
     def on_set_device_setting(self, msg, client_sock):
         """Handle SetDeviceSetting."""
@@ -291,6 +360,46 @@ class LensServer:
             "status": "UpToDate",
         }
 
+    def on_get_library_version(self, msg, client_sock):
+        return {
+            "type": "DeviceLibraryVersion",
+            "apiVersion": API_VERSION,
+            "version": "1.0.0-polytool",
+        }
+
+    def on_get_softphones(self, msg, client_sock):
+        return {
+            "type": "SoftphonesList",
+            "apiVersion": API_VERSION,
+            "softphones": [],
+        }
+
+    def on_get_primary_device(self, msg, client_sock):
+        # Return first device as primary
+        first_id = next(iter(self.devices), "")
+        return {
+            "type": "PrimaryDevice",
+            "apiVersion": API_VERSION,
+            "primaryDeviceInfo": {"deviceId": first_id} if first_id else None,
+        }
+
+    def on_register_softphones(self, msg, client_sock):
+        return {
+            "type": "SoftphonesRegistered",
+            "apiVersion": API_VERSION,
+        }
+
+    def on_get_software_update(self, msg, client_sock):
+        return {
+            "type": "AvailableSoftwareUpdate",
+            "apiVersion": API_VERSION,
+            "availableVersion": "",
+            "currentVersion": "",
+            "statuses": [],
+            "canPostpone": False,
+            "component": msg.get("component", ""),
+        }
+
     # ── Device I/O (delegated to our HID code) ───────────────────────
 
     def discover_devices(self):
@@ -304,15 +413,36 @@ class LensServer:
 
                 device_id = dev.id
                 self.devices[device_id] = {
+                    # camelCase — matches .NET JsonSerializer default naming
                     "deviceId": device_id,
                     "productName": dev.friendly_name or dev.product_name,
                     "deviceName": dev.product_name,
                     "firmwareVersion": dev.firmware_display,
                     "serialNumber": dev.serial or "",
-                    "deviceType": dev.category,
+                    "tattooSerialNumber": dev.serial or "",
+                    "deviceType": (dev.category or "headset").capitalize(),
                     "connected": True,
-                    "pid": dev.pid,
-                    "vid": dev.vid,
+                    "attached": True,
+                    "pid": str(dev.pid),
+                    "vid": str(dev.vid),
+                    "productId": f"{dev.pid:04x}",
+                    "macAddress": "",
+                    "bluetoothAddress": "",
+                    "hardwareRevision": "",
+                    "headsetVersion": dev.firmware_display,
+                    "baseVersion": "",
+                    "usbVersion": dev.firmware_display,
+                    "firmwareComponents": [],
+                    "peerDevices": [],
+                    "connectionType": "USB",
+                    "isAbleToBePrimaryForCallControl": True,
+                    "isMuted": False,
+                    "isInCall": False,
+                    "state": "Online",
+                    "supportData": {"state": "Supported"},
+                    "multiComponentState": None,
+                    "lastAttachedUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    # Internal — not sent to clients
                     "_polytool_dev": {
                         "path": dev.path,
                         "usage_page": dev.usage_page,

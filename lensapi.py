@@ -64,6 +64,7 @@ def find_lcs_port():
 
 API_VERSION = "1.14.1"
 CLIENT_NAME = "PolyTool"
+MSG_DELIM = "\x01"  # SOH byte — LensService message separator
 
 
 class LensAPIClient:
@@ -93,21 +94,21 @@ class LensAPIClient:
             self.sock = None
 
     def send(self, msg):
-        """Send a JSON message (newline-delimited)."""
-        data = json.dumps(msg) + "\n"
+        """Send a JSON message (SOH-delimited)."""
+        data = json.dumps(msg) + MSG_DELIM
         self.sock.sendall(data.encode("utf-8"))
 
     def recv(self, timeout=5):
         """Receive and parse one JSON message."""
         self.sock.settimeout(timeout)
         try:
-            while "\n" not in self.buffer:
+            while MSG_DELIM not in self.buffer:
                 chunk = self.sock.recv(65536)
                 if not chunk:
                     return None
                 self.buffer += chunk.decode("utf-8", errors="ignore")
 
-            line, self.buffer = self.buffer.split("\n", 1)
+            line, self.buffer = self.buffer.split(MSG_DELIM, 1)
             if line.strip():
                 return json.loads(line)
             return None
