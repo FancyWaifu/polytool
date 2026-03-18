@@ -1,0 +1,1425 @@
+[
+  {
+    "order": 0,
+    "category": "Admin",
+    "settings": [
+      {
+        "order": 1,
+        "id": "WiFi Status",
+        "type": "WIFI",
+        "labelType": "WIFI_LABEL",
+        "hideDescription": true,
+        "subsettings": [
+          {
+            "order": 1,
+            "id": "WiFi Status Auto Connect",
+            "hideDescription": true,
+            "type": "TOGGLE"
+          },
+          {
+            "order": 9,
+            "id": "WiFi Connect Param DHCP",
+            "type": "DROPDOWN",
+            "hideTitle": false,
+            "hideDescription": true
+          },
+          {
+            "order": 9,
+            "id": "WiFi Connect Param IP Address",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true,
+            "regexPattern": "^((25[0-5]|(2[0-4]|1[0-9]|[1-9]|)[0-9])(\\\\.(?!$)|$)){4}$"
+          },
+          {
+            "order": 9,
+            "id": "WiFi Connect Param Gateway",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true,
+            "regexPattern": "^((25[0-5]|(2[0-4]|1[0-9]|[1-9]|)[0-9])(\\\\.(?!$)|$)){4}$"
+          },
+          {
+            "order": 9,
+            "id": "WiFi Connect Param Subnet Mask",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true,
+            "regexPattern": "^((25[0-5]|(2[0-4]|1[0-9]|[1-9]|)[0-9])(\\\\.(?!$)|$)){4}$"
+          },
+          {
+            "order": 9,
+            "id": "WiFi Connect Param Password",
+            "hideTitle": false,
+            "hideDescription": true,
+            "type": "PASSWORD"
+          }
+        ]
+      },
+      {
+        "order": 2,
+        "id": "LAN Status",
+        "type": "LAN_STATUS",
+        "hideDescription": false,
+        "subsettings": [
+          {
+            "order": 1,
+            "id": "LAN",
+            "type": "LAN_SETTINGS",
+            "hideTitle": false,
+            "hideDescription": true
+          },
+          {
+            "order": 2,
+            "id": "LAN Web Proxy",
+            "type": "LAN_PROXY",
+            "hideTitle": false,
+            "hideDescription": true
+          },
+          {
+            "order": 9,
+            "id": "LAN DHCP",
+            "type": "DROPDOWN",
+            "hideTitle": false,
+            "hideDescription": true
+          },
+          {
+            "order": 9,
+            "id": "LAN 8021x Connect Param EAP Method",
+            "type": "DROPDOWN",
+            "hideTitle": false,
+            "hideDescription": true
+          },
+          {
+            "order": 9,
+            "id": "LAN 8021x Connect Param Phase2",
+            "type": "DROPDOWN",
+            "hideTitle": false,
+            "hideDescription": true
+          },
+          {
+            "order": 9,
+            "id": "LAN 8021x Connect Param Identity",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true
+          },
+          {
+            "order": 9,
+            "id": "LAN 8021x Connect Param Password",
+            "type": "PASSWORD",
+            "hideTitle": false,
+            "hideDescription": true
+          },
+          {
+            "order": 9,
+            "id": "IP Address",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true,
+            "regexPattern": "^((25[0-5]|(2[0-4]|1[0-9]|[1-9]|)[0-9])(\\\\.(?!$)|$)){4}$"
+          },
+          {
+            "order": 9,
+            "id": "Gateway",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true,
+            "regexPattern": "^((25[0-5]|(2[0-4]|1[0-9]|[1-9]|)[0-9])(\\\\.(?!$)|$)){4}$"
+          },
+          {
+            "order": 9,
+            "id": "Subnet mask",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true,
+            "regexPattern": "^((25[0-5]|(2[0-4]|1[0-9]|[1-9]|)[0-9])(\\\\.(?!$)|$)){4}$"
+          },
+          {
+            "order": 9,
+            "id": "LAN Web Proxy Port",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true
+          }
+        ]
+      },
+      {
+        "order": 3,
+        "id": "Bluetooth Enable",
+        "type": "TOGGLE",
+        "hideDescription": true,
+        "subsettings": [
+          {
+            "order": 4,
+            "id": "Bluetooth Autopair Enable",
+            "type": "TOGGLE",
+            "hideDescription": true
+          },
+          {
+            "order": 5,
+            "id": "Bluetooth BLE Enable",
+            "type": "TOGGLE"
+          }
+        ]
+      },
+      {
+        "order": 4,
+        "id": "Change password",
+        "type": "PASSWORD_CHANGE",
+        "hideDescription": true
+      },
+      {
+        "order": 5,
+        "id": "Provision Server",
+        "type": "PROVISIONING_SERVER",
+        "hideDescription": true,
+        "hideTitle": true,
+        "subsettings": [
+          {
+            "id": "Provision Server Mode",
+            "order": 1,
+            "type": "DROPDOWN_W_ICONS"
+          },
+          {
+            "id": "Provision Server Type",
+            "order": 2,
+            "type": "DROPDOWN_W_ICONS"
+          },
+          {
+            "id": "Provision Server URL",
+            "order": 3,
+            "type": "TEXT_FIELD_ADVANCED"
+          },
+          {
+            "id": "Provision Server Username",
+            "order": 4,
+            "type": "TEXT_FIELD_ADVANCED"
+          },
+          {
+            "id": "Provision Server Password",
+            "order": 5,
+            "type": "TEXT_FIELD_ADVANCED"
+          }
+        ]
+      },
+      {
+        "order": 6,
+        "id": "Config File",
+        "type": "CONFIGURATION"
+      },
+      {
+        "order": 7,
+        "id": "General",
+        "type": "NTP_USB",
+        "hideDescription": true,
+        "hideTitle": true,
+        "subsettingsRequired": true,
+        "subsettings": [
+          {
+            "id": "General Disable USB A Ports",
+            "order": 1,
+            "type": "TOGGLE"
+          },
+          {
+            "id": "General NTP Mode",
+            "order": 2,
+            "type": "DROPDOWN_W_ICONS"
+          },
+          {
+            "id": "General NTP Server",
+            "order": 3,
+            "type": "TEXT_FIELD_ADVANCED"
+          }
+        ]
+      },
+      {
+        "order": 8,
+        "id": "Cert Info",
+        "type": "CERTIFICATES",
+        "hideDescription": true,
+        "hideTitle": true,
+        "subsettings": [
+          {
+            "id": "CSR Info Provision Common Name",
+            "order": 1,
+            "type": "TEXT_FIELD_ADVANCED"
+          },
+          {
+            "id": "CSR Info Provision Country",
+            "order": 2,
+            "type": "TEXT_FIELD_ADVANCED"
+          },
+          {
+            "id": "CSR Info Provision State",
+            "order": 3,
+            "type": "TEXT_FIELD_ADVANCED"
+          },
+          {
+            "id": "CSR Info Provision Locality",
+            "order": 4,
+            "type": "TEXT_FIELD_ADVANCED"
+          },
+          {
+            "id": "CSR Info Provision Organization",
+            "order": 5,
+            "type": "TEXT_FIELD_ADVANCED"
+          },
+          {
+            "id": "CSR Info Provision Unit",
+            "order": 6,
+            "type": "TEXT_FIELD_ADVANCED"
+          },
+          {
+            "id": "CSR Info Provision Key Size",
+            "order": 100,
+            "type": "DROPDOWN_W_ICONS"
+          },
+          {
+            "id": "CSR Info Provision Hash Algorithm",
+            "order": 101,
+            "type": "DROPDOWN_W_ICONS"
+          }
+        ]
+      },
+      {
+        "order": 9,
+        "id": "SCEP",
+        "type": "SCEP",
+        "hideDescription": true,
+        "hideTitle": true,
+        "subsettings": [
+          {
+            "order": 9,
+            "id": "SCEP Enabled",
+            "hideDescription": true,
+            "hideTitle": true,
+            "type": "TOGGLE"
+          },
+          {
+            "order": 9,
+            "id": "SCEP Key Size",
+            "hideDescription": true,
+            "hideTitle": true,
+            "type": "DROPDOWN"
+          },
+          {
+            "order": 9,
+            "id": "SCEP Renewal Days",
+            "hideDescription": true,
+            "hideTitle": true,
+            "type": "DROPDOWN"
+          },
+          {
+            "order": 9,
+            "id": "SCEP Renewal Retry",
+            "hideDescription": true,
+            "hideTitle": true,
+            "type": "DROPDOWN"
+          },
+          {
+            "order": 9,
+            "id": "SCEP Enrollment Retry",
+            "hideDescription": true,
+            "hideTitle": true,
+            "type": "DROPDOWN"
+          },
+          {
+            "order": 9,
+            "id": "SCEP Renewal Percentage",
+            "hideDescription": true,
+            "hideTitle": true,
+            "type": "DROPDOWN"
+          },
+          {
+            "order": 9,
+            "id": "SCEP SAN IPv4 Address",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true,
+            "regexPattern": "^((25[0-5]|(2[0-4]|1[0-9]|[1-9]|)[0-9])(\\\\.(?!$)|$)){4}$"
+          },
+          {
+            "order": 9,
+            "id": "SCEP Server URL",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true
+          },
+          {
+            "order": 9,
+            "id": "SCEP Challenge Password",
+            "type": "PASSWORD",
+            "hideDescription": true
+          },
+          {
+            "order": 9,
+            "id": "SCEP CA Profile Name",
+            "type": "TEXT_FIELD_ADVANCED",
+            "hideTitle": false,
+            "hideDescription": true
+          }
+        ]
+      },
+      {
+        "order": 10,
+        "id": "Remote Logging",
+        "type": "REMOTE_LOGGING",
+        "hideDescription": true,
+        "hideTitle": true,
+        "subsettings": [
+          {
+            "id": "Remote Logging Enable",
+            "order": 1,
+            "type": "TOGGLE"
+          },
+          {
+            "id": "Remote Logging Protocol",
+            "order": 2,
+            "type": "DROPDOWN"
+          },
+          {
+            "id": "Remote Logging Address",
+            "order": 3,
+            "type": "TEXT_FIELD_ADVANCED",
+            "regexPattern": "^((25[0-5]|(2[0-4]|1[0-9]|[1-9]|)[0-9])(\\\\.(?!$)|$)){4}$"
+          },
+          {
+            "id": "Remote Logging Port",
+            "order": 4,
+            "type": "TEXT_FIELD_ADVANCED",
+            "regexPattern": "^[0-9]+$"
+          }
+        ]
+      },
+      {
+        "order": 11,
+        "id": "Restart Device",
+        "type": "RESTART_DEVICE"
+      },
+      {
+        "order": 12,
+        "id": "Admin Restore Defaults",
+        "type": "RESET_DEVICE"
+      }
+    ],
+    "securedWithPassword": true
+  },
+  {
+    "order": 1,
+    "category": "General",
+    "settings": [
+      {
+        "order": 1,
+        "id": "InstaDock Enable",
+        "type": "TOGGLE",
+        "subsettings": [
+          {
+            "order": 2,
+            "id": "InstaDock Distance",
+            "type": "DROPDOWN_W_ICONS",
+            "manageVisibilityByParentBoolValue": true
+          }
+        ]
+      },
+      {
+        "order": 2,
+        "id": "LED Base Enable",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 3,
+        "id": "Enable Participant Counting",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 4,
+        "id": "SoftPhone Icon",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 5,
+        "id": "Anti-flicker (50Hz / 60Hz) solution",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 6,
+        "id": "Answer/Ignore",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 7,
+        "id": "Answering Call",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 8,
+        "id": "Active Audio Tone",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 9,
+        "id": "Enable Audio Sensing",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 11,
+        "id": "Caller ID",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 12,
+        "id": "Mute Off Alert",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 13,
+        "id": "Mute Reminder",
+        "type": "DROPDOWN_W_ICONS",
+        "subsettings": [
+          {
+            "order": 14,
+            "id": "Mute Reminder Time",
+            "hideDescription": true,
+            "type": "MUTE_REMINDER_TIME",
+            "promotedWhenParentMissing": true
+          }
+        ]
+      },
+      {
+        "order": 15,
+        "id": "Online Indicator",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 16,
+        "id": "Auto-Answer (No Sensor)",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 17,
+        "id": "Default Line Type",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 18,
+        "id": "Second Incoming Call",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 19,
+        "id": "Tone Control",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 20,
+        "id": "Mute Alerts",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 21,
+        "id": "Mute On/Off Alerts",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 22,
+        "id": "Notification Tones",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 23,
+        "id": "Incoming Call",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 24,
+        "id": "Connection Indication",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 25,
+        "id": "Daisy Chain Audio Type",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 26,
+        "id": "Battery Status On/Off",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 27,
+        "id": "Mute Reminder Mode For Speaker Phones",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 28,
+        "id": "Speaker Tracking",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 29,
+        "id": "Speaker Tracking Mode",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 30,
+        "id": "Bluetooth Permissions",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 31,
+        "id": "0x0C90",
+        "type": "UP_DOWN"
+      },
+      {
+        "order": 32,
+        "id": "0x0C81",
+        "type": "SLIDER"
+      },
+      {
+        "order": 33,
+        "id": "Equalizer",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 34,
+        "id": "Pc Audio Persistence Mode",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 35,
+        "id": "Hold Reminder",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 36,
+        "id": "Custom Name",
+        "type": "DEVICE_RENAME_INPUT",
+        "regexPattern": "^.{1,30}$"
+      },
+      {
+        "order": 37,
+        "id": "Do Not Disturb",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 37,
+        "id": "Microphone Wearing Location",
+        "type": "DROPDOWN_W_ICONS"
+      }
+    ]
+  },
+  {
+    "order": 2,
+    "category": "Language",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Language Selection",
+        "type": "DROPDOWN_W_MODAL",
+        "restrictedInCall": true,
+        "labelType": "RESTRICTED_LABEL_WIDE_WITH_DFU_PREREQUISITES"
+      }
+    ]
+  },
+  {
+    "order": 3,
+    "category": "Voice Prompts & Tones",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Manage All",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 2,
+        "id": "Calls",
+        "type": "TOGGLE",
+        "subsettings": [
+          {
+            "order": 3,
+            "id": "Incoming Call",
+            "type": "TOGGLE",
+            "hideDescription": true
+          },
+          {
+            "order": 4,
+            "id": "Answering Call",
+            "type": "TOGGLE",
+            "hideDescription": true
+          },
+          {
+            "order": 5,
+            "id": "Answer/Ignore",
+            "type": "TOGGLE",
+            "hideDescription": true
+          },
+          {
+            "order": 6,
+            "id": "Active Audio Tone",
+            "type": "TOGGLE",
+            "hideDescription": true
+          }
+        ]
+      },
+      {
+        "order": 7,
+        "id": "Connection",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 8,
+        "id": "Hold Reminder",
+        "type": "TOGGLE"
+      }
+    ]
+  },
+  {
+    "order": 9,
+    "category": "Lights",
+    "settings": [
+      {
+        "order": 1,
+        "id": "0xC82",
+        "type": "SLIDER"
+      },
+      {
+        "order": 2,
+        "id": "0xC84",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 3,
+        "id": "0xC85",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 4,
+        "id": "0xC86",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 5,
+        "id": "0xC87",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 6,
+        "id": "0xC89",
+        "type": "TOGGLE"
+      }
+    ]
+  },
+  {
+    "order": 4,
+    "category": "Ringtones & Volume",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Sidetone",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 2,
+        "id": "Volume Level Tones",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 3,
+        "id": "Ringtone",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 4,
+        "id": "Base Ringer Volume",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 2,
+        "id": "Desk Phone",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 3,
+        "id": "Desk Phone Volume",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 4,
+        "id": "Mobile Interface Ringtone",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 5,
+        "id": "Ring Tone Volume Mobile",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 6,
+        "id": "VoIP Interface Ringtone",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 7,
+        "id": "Computer Volume",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 8,
+        "id": "Charge Confirmation",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 10,
+        "id": "Vibrate on Ring",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 12,
+        "id": "Independent Volume Control",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 13,
+        "id": "ANC Timeout",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 14,
+        "id": "Mute Tone Volume",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 15,
+        "id": "System Tone Volume",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 16,
+        "id": "Volume Control Orientation",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 18,
+        "id": "Volume Min/Max Alerts",
+        "type": "DROPDOWN_W_ICONS"
+      }
+    ]
+  },
+  {
+    "order": 19,
+    "category": "Audio",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Acoustic Fence",
+        "type": "DROPDOWN_W_ICONS",
+        "additionalInfo": {
+          "linkText": "MODALS.ACOUSTIC_FENCE.LINK_TEXT",
+          "modalComponent": "px"
+        }
+      },
+      {
+        "order": 2,
+        "id": "Audio Acoustic Fence",
+        "type": "TOGGLE",
+        "additionalInfo": {
+          "linkText": "MODALS.ACOUSTIC_FENCE.LINK_TEXT",
+          "modalComponent": "px"
+        }
+      },
+      {
+        "order": 3,
+        "id": "Audio Acoustic Fence Sensitivity",
+        "type": "SLIDER"
+      },
+      {
+        "order": 4,
+        "id": "Audio Advanced Noise Block AI",
+        "type": "DROPDOWN_W_ICONS",
+        "additionalInfo": {
+          "linkText": "MODALS.NOISEBLOCKAI.LINK_TEXT",
+          "modalComponent": "mx"
+        }
+      },
+      {
+        "order": 5,
+        "id": "Audio Noise Block AI",
+        "type": "DROPDOWN_W_ICONS",
+        "additionalInfo": {
+          "linkText": "MODALS.NOISEBLOCKAI.LINK_TEXT",
+          "modalComponent": "mx"
+        }
+      },
+      {
+        "order": 6,
+        "id": "NoiseBlock AI - Outgoing",
+        "type": "TOGGLE",
+        "additionalInfo": {
+          "linkText": "MODALS.NOISEBLOCKAI.LINK_TEXT",
+          "modalComponent": "mx"
+        }
+      },
+      {
+        "order": 7,
+        "id": "NoiseBlock AI - Incoming",
+        "type": "TOGGLE",
+        "additionalInfo": {
+          "linkText": "MODALS.NOISEBLOCKAI.LINK_TEXT",
+          "modalComponent": "mx"
+        }
+      },
+      {
+        "order": 8,
+        "id": "0xC26",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 9,
+        "id": "0xC17",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 10,
+        "id": "Audio Bass",
+        "type": "SLIDER",
+        "units": "decibels"
+      },
+      {
+        "order": 11,
+        "id": "Audio Treble",
+        "type": "SLIDER",
+        "units": "decibels"
+      },
+      {
+        "order": 12,
+        "id": "Audio Volume",
+        "type": "SLIDER"
+      },
+      {
+        "order": 13,
+        "id": "Enable Auto Mic Switching",
+        "type": "MIC_SWITCH"
+      },
+      {
+        "order": 14,
+        "id": "Audio USB Async Audio",
+        "type": "TOGGLE"
+      }
+    ]
+  },
+  {
+    "order": 5,
+    "category": "Sensors & Presence",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Wearing Sensor",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 2,
+        "id": "Active Call Audio",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 3,
+        "id": "Auto-Answer",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 4,
+        "id": "Auto-Pause Music",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 5,
+        "id": "Auto-Lock Call Button Mode",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 6,
+        "id": "Smart Audio Transfer",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 7,
+        "id": "Auto Mute",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 8,
+        "id": "Quick Disconnect",
+        "type": "DROPDOWN"
+      }
+    ]
+  },
+  {
+    "order": 8,
+    "category": "Softphones & Media Players",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Dialtone On/Off",
+        "type": "TOGGLE"
+      }
+    ]
+  },
+  {
+    "order": 3,
+    "category": "Wireless",
+    "settings": [
+      {
+        "order": 1,
+        "id": "DECT Density",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 2,
+        "id": "Extended Range Mode (PC)",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 3,
+        "id": "HD Voice",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 4,
+        "id": "Auto Connect To Mobile",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 5,
+        "id": "Auto Connect To Mobile Phone 2",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 6,
+        "id": "Bluetooth Enabled",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 7,
+        "id": "Bluetooth",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 8,
+        "id": "Audio Bandwidth PSTN",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 9,
+        "id": "Audio Bandwidth VoIP",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 10,
+        "id": "Mobile Voice Commands",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 11,
+        "id": "OTA Subscription",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 12,
+        "id": "Power Level",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 13,
+        "id": "A2DP Mode On/Off",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 14,
+        "id": "Clear Trusted Device List",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 15,
+        "id": "Bluetooth Secure Connection",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 16,
+        "id": "Exclusive Connection",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 17,
+        "id": "Keep Link Up",
+        "type": "DROPDOWN"
+      },
+      {
+        "order": 18,
+        "id": "Auto Reconnect Daisy Chain",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 19,
+        "id": "Auto Disconnect Bluetooth",
+        "type": "TOGGLE"
+      }
+    ]
+  },
+  {
+    "order": 6,
+    "category": "Advanced",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Anti Startle",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 2,
+        "id": "Anti-Startle",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 3,
+        "id": "Anti Startle 2",
+        "type": "DROPDOWN",
+        "additionalInfo": {
+          "linkText": "MODALS.ANTI_STARTLE.LINK_TEXT",
+          "modalComponent": "sx"
+        }
+      },
+      {
+        "order": 4,
+        "id": "Noise Exposure",
+        "type": "DROPDOWN_W_ICONS",
+        "subsettings": [
+          {
+            "order": 5,
+            "id": "Hours on Phone Per Day",
+            "type": "DROPDOWN_W_ICONS"
+          }
+        ]
+      },
+      {
+        "order": 6,
+        "id": "Select Headset Type",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 7,
+        "id": "Multiband Expander",
+        "type": "RADIO",
+        "orientation": "Vertical",
+        "restrictedInCall": true,
+        "labelType": "RESTRICTED_LABEL_NARROW"
+      }
+    ]
+  },
+  {
+    "order": 7,
+    "category": "ANC",
+    "settings": [
+      {
+        "order": 1,
+        "id": "ANC Mode",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 2,
+        "id": "ANC Mode Bool",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 3,
+        "id": "ANC Mode Advanced",
+        "type": "CUSTOM_TOGGLE_WITH_RADIO_OPTIONS",
+        "labelType": "NONE"
+      },
+      {
+        "order": 4,
+        "id": "Transparency Mode",
+        "type": "DROPDOWN_W_ICONS",
+        "restrictedInCall": true,
+        "labelType": "RESTRICTED_LABEL_WIDE"
+      },
+      {
+        "order": 5,
+        "id": "Transparency Mode Bool",
+        "type": "TOGGLE",
+        "restrictedInCall": true,
+        "labelType": "RESTRICTED_LABEL_NARROW"
+      },
+      {
+        "order": 6,
+        "id": "Transparency Mode Advanced",
+        "type": "CUSTOM_TOGGLE_WITH_RADIO_OPTIONS",
+        "restrictedInCall": true,
+        "labelType": "NONE"
+      }
+    ]
+  },
+  {
+    "order": 4,
+    "category": "Apps",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Bisto",
+        "type": "TOGGLE"
+      }
+    ]
+  },
+  {
+    "order": 8,
+    "category": "Custom Button",
+    "settings": [
+      {
+        "order": 1,
+        "id": "0xC8E",
+        "type": "DROPDOWN_W_ICONS",
+        "hiddenOptions": [
+          "vpa",
+          "redial",
+          "lens",
+          "videoMute"
+        ]
+      },
+      {
+        "order": 2,
+        "id": "Custom Button",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 3,
+        "id": "Custom Button Provider",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 4,
+        "id": "Custom Button Microsoft Teams Running State",
+        "hideDescription": true,
+        "hideTitle": true,
+        "type": "CUSTOM_TEAMS_BUTTON"
+      }
+    ]
+  },
+  {
+    "order": 8,
+    "category": "Custom Swipe",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Custom Swipe Sensor Idle",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 2,
+        "id": "Custom Swipe Sensor In Call",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 3,
+        "id": "Custom Swipe Sensor Streaming Media",
+        "type": "DROPDOWN_W_ICONS"
+      }
+    ]
+  },
+  {
+    "order": 9,
+    "category": "Reset Device",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Factory Reset",
+        "type": "RESET_DEVICE"
+      },
+      {
+        "order": 2,
+        "id": "Delete All Paired Devices",
+        "type": "BUTTON"
+      },
+      {
+        "order": 3,
+        "id": "Restart Device",
+        "type": "RESTART_DEVICE"
+      },
+      {
+        "order": 4,
+        "id": "Factory Defaults",
+        "type": "RESET_DEVICE"
+      },
+      {
+        "order": 5,
+        "id": "InstaDock Clear",
+        "type": "RESET_QUICK_CONNECT"
+      },
+      {
+        "order": 6,
+        "id": "Restore Defaults",
+        "type": "RESTORE_DEFAULTS"
+      },
+      {
+        "order": 7,
+        "id": "Display Factory Reset",
+        "type": "DISPLAY_FACTORY_RESET"
+      }
+    ]
+  },
+  {
+    "order": 20,
+    "category": "Diagnostics",
+    "settings": [
+      {
+        "order": 1,
+        "id": "On Screen Display (OSD)",
+        "type": "TOGGLE"
+      }
+    ]
+  },
+  {
+    "order": 21,
+    "category": "Image",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Display Brightness",
+        "type": "DISPLAY_BRIGHTNESS"
+      },
+      {
+        "order": 2,
+        "id": "Display Auto-Brightness",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 3,
+        "id": "Display Contrast",
+        "type": "SLIDER"
+      },
+      {
+        "order": 4,
+        "id": "Display Dynamic Contrast",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 5,
+        "id": "Display Sharpness",
+        "type": "SLIDER"
+      },
+      {
+        "order": 6,
+        "id": "Display Black Stretch",
+        "type": "DROPDOWN_W_ICONS"
+      }
+    ]
+  },
+  {
+    "order": 22,
+    "category": "Color",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Display Traditional",
+        "type": "CATEGORIZED_DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 2,
+        "id": "Display Custom RGB",
+        "type": "COLOR_PRESET",
+        "hideDescription": true,
+        "hideTitle": true
+      }
+    ]
+  },
+  {
+    "order": 23,
+    "category": "Input",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Display Input Source",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 2,
+        "id": "Display Auto Switch Input Source",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 3,
+        "id": "Display Hot Plug Detection",
+        "type": "TOGGLE",
+        "hideDescription": true
+      },
+      {
+        "order": 4,
+        "id": "Display Resolution and Refresh Rate",
+        "type": "RESOLUTION_REFRESH_RATE",
+        "hideDescription": true,
+        "hideTitle": true,
+        "subsettings": [
+          {
+            "order": 5,
+            "id": "Display Resolution",
+            "type": "DROPDOWN_W_ICONS"
+          },
+          {
+            "order": 6,
+            "id": "Display Refresh Rate",
+            "type": "DROPDOWN_W_ICONS"
+          }
+        ]
+      },
+      {
+        "order": 7,
+        "id": "Display Response Time",
+        "type": "DROPDOWN_W_ICONS"
+      },
+      {
+        "order": 8,
+        "id": "Display USB-C Configuration Status",
+        "type": "DROPDOWN_W_ICONS",
+        "hideDescription": true
+      }
+    ]
+  },
+  {
+    "order": 24,
+    "category": "Advanced",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Display Power Mode",
+        "type": "DROPDOWN_W_ICONS",
+        "hideDescription": true
+      },
+      {
+        "order": 2,
+        "id": "Display Auto Sleep",
+        "type": "TOGGLE"
+      }
+    ]
+  },
+  {
+    "order": 25,
+    "category": "Audio",
+    "settings": [
+      {
+        "order": 1,
+        "id": "Display Speaker Volume",
+        "type": "SLIDER"
+      },
+      {
+        "order": 2,
+        "id": "Display Speaker Mute",
+        "type": "TOGGLE"
+      },
+      {
+        "order": 3,
+        "id": "Display AI Noise Cancellation",
+        "type": "TOGGLE",
+        "hideDescription": true
+      }
+    ]
+  }
+]

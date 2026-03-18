@@ -301,33 +301,25 @@ class LensServer:
     def on_get_device_settings(self, msg, client_sock):
         """Handle GetDeviceSettings."""
         device_id = msg.get("deviceId", "")
-        settings = self.read_device_settings(device_id)
+        metadata, values = self._get_device_settings_formatted(device_id)
 
-        # Convert to LensServiceApi format
-        api_settings = []
-        for s in settings:
-            setting = {"name": s.get("name", ""), "value": s.get("value")}
-            if s.get("type") == "bool":
-                setting["valueBool"] = bool(s.get("value", False))
-            elif s.get("type") == "range":
-                setting["valueInt"] = int(s.get("value", 0)) if s.get("value") is not None else 0
-            else:
-                setting["valueString"] = str(s.get("value", ""))
-            api_settings.append(setting)
-
-        # Send settings response
+        # Send settings values
         self.send_msg(client_sock, {
             "type": "DeviceSettings",
             "apiVersion": API_VERSION,
             "deviceId": device_id,
-            "settings": api_settings,
+            "settings": values,
         })
 
-        # Also push metadata right after (GUI needs this to render settings tab)
-        metadata_resp = self.on_get_settings_metadata(msg, client_sock)
-        if metadata_resp and metadata_resp.get("settings"):
-            self.send_msg(client_sock, metadata_resp)
-            print(f"  → DeviceSettingsMetadata: {len(metadata_resp['settings'])} settings")
+        # Push metadata right after (GUI needs this for settings tab)
+        if metadata:
+            self.send_msg(client_sock, {
+                "type": "DeviceSettingsMetadata",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+                "settings": metadata,
+            })
+            print(f"  → DeviceSettingsMetadata: {len(metadata)} settings")
 
         return None  # already sent
 
@@ -384,64 +376,53 @@ class LensServer:
         value = msg.get("valueBool", msg.get("valueInt", msg.get("valueFloat",
                 msg.get("valueString", msg.get("valueEnum")))))
 
-        success = self.write_device_setting(device_id, name, value)
+        # Store in cache
+        if device_id not in self._device_settings_cache:
+            self._device_settings_cache[device_id] = {}
+        self._device_settings_cache[device_id][name] = value
 
-        return {
+        # Try writing to device via HID
+        success = self.write_device_setting(device_id, name, value)
+        print(f"  Set {name} = {value} [{'OK' if success else 'stored'}]")
+
+        # Broadcast the update to all clients
+        update_msg = {
             "type": "DeviceSettingUpdated",
             "apiVersion": API_VERSION,
             "deviceId": device_id,
-            "name": name,
-            "value": value,
-            "success": success,
+            "setting": {"name": name, "value": value},
         }
+        self.broadcast(update_msg)
+
+        return None  # already broadcast
+
+    # Per-device settings value cache
+    _device_settings_cache = {}
 
     def on_get_settings_metadata(self, msg, client_sock):
         """Handle GetDeviceSettingsMetadata."""
         device_id = msg.get("deviceId", "")
-        settings = self.read_device_settings(device_id)
-
-        metadata = []
-        for s in settings:
-            stype = s.get("type", "string")
-            data_type = {"bool": "bool", "range": "int", "choice": "enum",
-                         "text": "string"}.get(stype, "string")
-
-            meta = {
-                "name": s.get("name", ""),
-                "meta": {
-                    "name": s.get("name", ""),
-                    "dataType": data_type,
-                    "readable": True,
-                    "writable": s.get("writable", True),
-                    "storeType": "DeviceSettings",
-                    "compound": None,
-                    "hidden": False,
-                },
-                "value": s.get("value"),
-                "value_int": int(s["value"]) if stype == "range" and s.get("value") is not None else None,
-                "value_bool": bool(s["value"]) if stype == "bool" else None,
-                "value_string": str(s["value"]) if stype == "text" and s.get("value") is not None else None,
-                "value_enum": str(s["value"]) if stype == "choice" and s.get("value") is not None else None,
-                "value_compound": None,
-                "value_struct_array": None,
-                "auto_mode": False,
-                "default_struct_array_value": None,
-            }
-
-            if stype == "choice" and s.get("choices"):
-                meta["meta"]["possibleValues"] = s["choices"]
-            if stype == "range":
-                meta["meta"]["minValue"] = s.get("min", 0)
-                meta["meta"]["maxValue"] = s.get("max", 10)
-
-            metadata.append(meta)
-
+        metadata, _ = self._get_device_settings_formatted(device_id)
         return {
             "type": "DeviceSettingsMetadata",
             "apiVersion": API_VERSION,
             "deviceId": device_id,
             "settings": metadata,
         }
+
+    def _get_device_settings_formatted(self, device_id):
+        """Get settings metadata + values in LensServiceApi format."""
+        from lens_settings import get_settings_for_device, settings_to_api_format
+
+        dev = self.devices.get(device_id, {})
+        ptd = dev.get("_polytool_dev", {})
+        usage_page = ptd.get("usage_page", 0)
+        dfu_executor = ptd.get("dfu_executor", "")
+
+        settings_defs = get_settings_for_device(usage_page, dfu_executor)
+        current_values = self._device_settings_cache.get(device_id, {})
+
+        return settings_to_api_format(settings_defs, current_values)
 
     def on_get_dfu_status(self, msg, client_sock):
         """Handle GetDeviceDFUStatus."""
