@@ -173,8 +173,12 @@ class LensServer:
                             "setting": {"name": "Product Images", "value": image_data},
                         })
 
-                # Removed devices
+                # Removed devices (skip native bridge devices — they're not in USB scan)
                 for did in old_ids - new_ids:
+                    dev = self.devices.get(did, {})
+                    ptd = dev.get("_polytool_dev", {})
+                    if ptd.get("_native_id"):
+                        continue  # BT device from native bridge, not USB-discoverable
                     print(f"  -- Device removed: {did}")
                     self.broadcast({
                         "type": "DeviceDetached",
@@ -660,10 +664,13 @@ class LensServer:
                 # Populate settings cache from real HID reads
                 self._populate_settings_cache(device_id, dev)
 
-            # Remove devices no longer present
+            # Remove USB devices no longer present (preserve native bridge devices)
             removed = set(self.devices.keys()) - current_ids
             for did in removed:
-                del self.devices[did]
+                dev = self.devices.get(did, {})
+                ptd = dev.get("_polytool_dev", {})
+                if not ptd.get("_native_id"):  # only remove USB devices
+                    del self.devices[did]
 
             return current_ids
         except Exception as e:
