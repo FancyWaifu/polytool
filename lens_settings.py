@@ -45,28 +45,41 @@ def _choice_default(name, display_default):
 # Setting names MUST match the IDs in settingsCategories (from Poly Studio renderer)
 # possible_values uses INTERNAL KEYS (not display values) — from DeviceSetting.json
 DECT_SETTINGS = [
-    # Ringtones & Volume
-    {"name": "Sidetone", "type": "enum", "choices": _choices("Sidetone") or ["low", "medium", "high"], "default": _choice_default("Sidetone", "Medium")},
-    {"name": "Volume Level Tones", "type": "enum", "choices": _choices("Volume Level Tones") or ["all", "minMax"], "default": _choice_default("Volume Level Tones", "At Every Level")},
-    {"name": "Base Ringer Volume", "type": "int", "min": 0, "max": 10, "default": 7},
-    {"name": "Desk Phone", "type": "enum", "choices": _choices("Desk Phone") or ["sound1", "sound2", "sound3", "off"], "default": _choice_default("Desk Phone", "Sound 1")},
-    # Wireless
-    {"name": "DECT Density", "type": "enum", "choices": _choices("DECT Density") or ["homeMode", "enterpriseMode", "mono", "narrowBand"], "default": _choice_default("DECT Density", "Conversation")},
-    {"name": "HD Voice", "type": "bool", "default": True},
-    {"name": "Power Level", "type": "enum", "choices": _choices("Power Level") or ["low", "medium", "high"], "default": _choice_default("Power Level", "High")},
-    {"name": "Keep Link Up", "type": "enum", "choices": _choices("Keep Link Up") or ["duringCall", "always"], "default": _choice_default("Keep Link Up", "Active Only During Call")},
-    {"name": "Default Line Type", "type": "enum", "choices": _choices("Default Line Type") or ["deskPhone", "computer", "mobile"], "default": _choice_default("Default Line Type", "Computer")},
-    {"name": "Second Incoming Call", "type": "enum", "choices": _choices("Second Incoming Call") or ["ignore", "once", "continuous"], "default": _choice_default("Second Incoming Call", "Ignore")},
-    # Sensors & Presence
-    {"name": "Wearing Sensor", "type": "bool", "default": False},
+    # ── General ──
+    {"name": "Answering Call", "type": "bool", "default": False},
+    {"name": "Active Call Audio", "type": "bool", "default": False},
     {"name": "Auto-Answer", "type": "bool", "default": False},
-    {"name": "Active Call Audio", "type": "enum", "choices": _choices("Active Call Audio") or ["doNothing", "transferAudioToMobile", "muteMic"], "default": _choice_default("Active Call Audio", "Do Nothing")},
-    # Advanced
-    {"name": "Anti-Startle", "type": "bool", "default": True},
-    {"name": "Anti Startle 2", "type": "enum", "choices": _choices("Anti Startle 2") or ["off", "standard", "enhanced"], "default": _choice_default("Anti Startle 2", "Standard")},
-    {"name": "Noise Exposure", "type": "enum", "choices": _choices("Noise Exposure") or ["85db", "80db", "off"], "default": _choice_default("Noise Exposure", "Limit at 85 dBA")},
+    {"name": "Online Indicator", "type": "bool", "default": False},
+    {"name": "Smart Audio Transfer", "type": "bool", "default": False},
+    {"name": "Default Line Type", "type": "enum", "choices": _choices("Default Line Type") or ["pstn", "voip", "mobile"], "default": _choice_default("Default Line Type", "Computer")},
+    {"name": "Second Incoming Call", "type": "enum", "choices": _choices("Second Incoming Call") or ["ignore", "once", "continuous"], "default": _choice_default("Second Incoming Call", "Ignore")},
+    # ── Ringtones & Volume ──
+    {"name": "Sidetone", "type": "enum", "choices": _choices("Sidetone") or ["low", "medium", "high"], "default": _choice_default("Sidetone", "Medium")},
+    {"name": "Base Ringer Volume", "type": "enum", "choices": _choices("Base Ringer Volume") or ["off", "low", "medium", "high"], "default": _choice_default("Base Ringer Volume", "Medium")},
+    {"name": "Computer Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
+    {"name": "Desk Phone Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
+    {"name": "Desk Phone", "type": "enum", "choices": _choices("Desk Phone") or ["sound1", "sound2", "sound3", "off"], "default": _choice_default("Desk Phone", "Sound 1")},
+    {"name": "VoIP Interface Ringtone", "type": "enum", "choices": ["sound1", "sound2", "sound3"], "default": "sound1"},
+    {"name": "Volume Level Tones", "type": "enum", "choices": _choices("Volume Level Tones") or ["atEveryLevel", "minMaxOnly"], "default": _choice_default("Volume Level Tones", "At Every Level")},
+    {"name": "Mute On/Off Alerts", "type": "enum", "choices": ["singleTone", "doubleTone", "voice"], "default": "voice"},
+    {"name": "System Tone Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
+    {"name": "Mute Reminder Time", "type": "enum", "choices": ["off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"], "default": "15"},
+    # ── Wireless ──
+    {"name": "DECT Density", "type": "enum", "choices": _choices("DECT Density") or ["homeMode", "enterpriseMode", "mono"], "default": _choice_default("DECT Density", "Conversation")},
+    {"name": "OTA Subscription", "type": "bool", "default": True},
+    {"name": "Power Level", "type": "enum", "choices": _choices("Power Level") or ["low", "medium", "high"], "default": _choice_default("Power Level", "High")},
+    {"name": "Keep Link Up", "type": "enum", "choices": _choices("Keep Link Up") or ["activeonlyduringcall", "alwaysactive"], "default": _choice_default("Keep Link Up", "Active Only During Call")},
+    # ── Sensors & Presence ──
+    {"name": "Wearing Sensor", "type": "bool", "default": False},
+    {"name": "Enable Audio Sensing", "type": "bool", "default": False},
+    {"name": "Dialtone On/Off", "type": "bool", "default": True},
+    # ── Advanced / Audio ──
+    {"name": "Anti-Startle", "type": "bool", "default": False},
+    {"name": "Anti Startle 2", "type": "bool", "default": True},
+    {"name": "Noise Exposure", "type": "enum", "choices": _choices("Noise Exposure") or ["off", "85db", "80db"], "default": _choice_default("Noise Exposure", "No Limiting")},
     {"name": "Hours on Phone Per Day", "type": "enum", "choices": _choices("Hours on Phone Per Day") or ["2", "4", "6", "8", "off"], "default": _choice_default("Hours on Phone Per Day", "Off")},
-    # Language
+    {"name": "Multiband Expander", "type": "enum", "choices": ["no", "moderate", "agressive"], "default": "moderate"},
+    # ── Language ──
     {"name": "Language Selection", "type": "enum", "choices": ["en", "fr", "de", "es", "it", "pt", "nl", "sv", "no", "da", "fi", "ja", "ko", "zh", "yue", "ru"], "default": "en"},
 ]
 

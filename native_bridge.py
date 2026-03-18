@@ -218,32 +218,39 @@ class NativeBridge:
 # ── DECT Setting Name → Hex ID Map ──────────────────────────────────────────
 
 DECT_SETTING_IDS = {
+    # General
     "Second Incoming Call":   "0x102",
+    "Default Line Type":      "0x400",
+    "Answering Call":         "0x601",
+    "Online Indicator":       "0x902",
+    "Smart Audio Transfer":   "0x90a",
+    "Auto-Answer":            "0x300",
+    # Ringtones & Volume
     "Computer Volume":        "0x103",
     "Desk Phone Volume":      "0x104",
     "VoIP Interface Ringtone": "0x106",
     "Desk Phone":             "0x107",
     "Base Ringer Volume":     "0x10a",
-    "Auto-Answer":            "0x300",
-    "Default Line Type":      "0x400",
-    "Noise Exposure":         "0x500",
-    "Hours on Phone Per Day": "0x501",
-    "Anti-Startle":           "0x504",
-    "Anti Startle 2":         "0x505",
-    "Answering Call":         "0x601",
     "Mute Reminder Time":     "0x603",
     "Mute On/Off Alerts":     "0x607",
     "System Tone Volume":     "0x608",
     "Volume Level Tones":     "0x609",
     "Active Call Audio":      "0x60c",
+    # Wireless
     "DECT Density":           "0x700",
     "OTA Subscription":       "0x701",
     "Power Level":            "0x702",
-    "Multiband Expander":     "0x802",
-    "Online Indicator":       "0x902",
-    "Wearing Sensor":         "0xa00",
-    "Dialtone On/Off":        "0xa01",
     "Keep Link Up":           "0xfff4",
+    # Sensors & Presence
+    "Wearing Sensor":         "0xa00",
+    "Enable Audio Sensing":   "0xa00",
+    "Dialtone On/Off":        "0xa01",
+    # Advanced / Audio
+    "Anti-Startle":           "0x504",
+    "Anti Startle 2":         "0x505",
+    "Noise Exposure":         "0x500",
+    "Hours on Phone Per Day": "0x501",
+    "Multiband Expander":     "0x802",
 }
 
 
