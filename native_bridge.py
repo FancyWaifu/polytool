@@ -272,70 +272,101 @@ class NativeBridge:
 
 # ── DECT Setting Name → Hex ID Map ──────────────────────────────────────────
 
-VOYAGER_SETTING_IDS = {
-    # Voyager 4320 / BT headset settings
-    "Second Incoming Call":        "0x102",
-    "Ringtone":                    "0x109",
-    "Auto-Answer":                 "0x300",
-    "Noise Exposure":              "0x500",
-    "Hours on Phone Per Day":      "0x501",
-    "Anti Startle 2":              "0x505",
-    "Answering Call":              "0x601",
-    "Mute Reminder Time":          "0x603",
-    "Mute On/Off Alerts":          "0x607",
-    "Volume Level Tones":          "0x609",
-    "Active Call Audio":           "0x60c",
-    "Mute Off Alert":              "0x60d",
-    "Audio Bandwidth VoIP":        "0x708",
-    "Sidetone":                    "0x803",
-    "Notification Tones":          "0x805",
-    "Online Indicator":            "0x902",
-    "Smart Audio Transfer":        "0x90a",
-    "Restore Defaults":            "0x90a",
-    # Voyager Base-M CD settings
-    "Computer Volume":             "0x103",
-    "Desk Phone Volume":           "0x104",
-    "VoIP Interface Ringtone":     "0x106",
-    "Desk Phone":                  "0x107",
-    "Default Line Type":           "0x400",
-    "Dialtone On/Off":             "0xa01",
+# ── Unified Setting ID Map ───────────────────────────────────────────────────
+# Master map: hex_id → {name, type, choices, default}
+# Covers ALL known Poly setting IDs across all device families.
+# Used to dynamically build settings profiles for any device.
+
+ALL_SETTING_DEFS = {
+    "0x102": {"name": "Second Incoming Call", "type": "enum", "choices": ["ignore", "once", "continuous"], "default": "ignore"},
+    "0x103": {"name": "Computer Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
+    "0x104": {"name": "Desk Phone Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
+    "0x106": {"name": "VoIP Interface Ringtone", "type": "enum", "choices": ["sound1", "sound2", "sound3"], "default": "sound1"},
+    "0x107": {"name": "Desk Phone", "type": "enum", "choices": ["sound1", "sound2", "sound3", "off"], "default": "sound1"},
+    "0x109": {"name": "Ringtone", "type": "bool", "default": True},
+    "0x10a": {"name": "Base Ringer Volume", "type": "enum", "choices": ["off", "low", "medium", "high"], "default": "medium"},
+    "0x300": {"name": "Auto-Answer", "type": "bool", "default": False},
+    "0x400": {"name": "Default Line Type", "type": "enum", "choices": ["pstn", "voip", "mobile"], "default": "voip"},
+    "0x500": {"name": "Noise Exposure", "type": "enum", "choices": ["off", "85db", "80db"], "default": "off"},
+    "0x501": {"name": "Hours on Phone Per Day", "type": "enum", "choices": ["2", "4", "6", "8", "off"], "default": "8"},
+    "0x504": {"name": "Anti-Startle", "type": "bool", "default": False},
+    "0x505": {"name": "Anti Startle 2", "type": "bool", "default": True},
+    "0x601": {"name": "Answering Call", "type": "bool", "default": True},
+    "0x603": {"name": "Mute Reminder Time", "type": "enum", "choices": ["off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"], "default": "15"},
+    "0x607": {"name": "Mute On/Off Alerts", "type": "enum", "choices": ["singleTone", "doubleTone", "voice"], "default": "voice"},
+    "0x608": {"name": "System Tone Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
+    "0x609": {"name": "Volume Level Tones", "type": "enum", "choices": ["atEveryLevel", "minMaxOnly"], "default": "atEveryLevel"},
+    "0x60c": {"name": "Active Call Audio", "type": "bool", "default": False},
+    "0x60d": {"name": "Mute Off Alert", "type": "enum", "choices": ["off", "timed", "voiceAudible", "voiceVisible", "voiceVisibleAndAudible"], "default": "voiceAudible"},
+    "0x700": {"name": "DECT Density", "type": "enum", "choices": ["homeMode", "enterpriseMode", "mono"], "default": "mono"},
+    "0x701": {"name": "OTA Subscription", "type": "bool", "default": True},
+    "0x702": {"name": "Power Level", "type": "enum", "choices": ["low", "medium", "high"], "default": "medium"},
+    "0x708": {"name": "Audio Bandwidth VoIP", "type": "enum", "choices": ["narrowband", "wideband"], "default": "wideband"},
+    "0x802": {"name": "Multiband Expander", "type": "enum", "choices": ["no", "moderate", "agressive"], "default": "moderate"},
+    "0x803": {"name": "Sidetone", "type": "enum", "choices": ["low", "medium", "high"], "default": "medium"},
+    "0x805": {"name": "Notification Tones", "type": "bool", "default": False},
+    "0x902": {"name": "Online Indicator", "type": "bool", "default": True},
+    "0x90a": {"name": "Smart Audio Transfer", "type": "bool", "default": True},
+    "0xa00": {"name": "Enable Audio Sensing", "type": "bool", "default": False},
+    "0xa01": {"name": "Dialtone On/Off", "type": "bool", "default": True},
+    "0xb05": {"name": "Caller ID", "type": "bool", "default": True},
+    "0xb06": {"name": "Tone Control", "type": "enum", "choices": ["tone", "voice"], "default": "voice"},
+    "0xfff4": {"name": "Keep Link Up", "type": "enum", "choices": ["activeonlyduringcall", "alwaysactive"], "default": "activeonlyduringcall"},
 }
 
-DECT_SETTING_IDS = {
-    # General
-    "Second Incoming Call":   "0x102",
-    "Default Line Type":      "0x400",
-    "Answering Call":         "0x601",
-    "Online Indicator":       "0x902",
-    "Smart Audio Transfer":   "0x90a",
-    "Auto-Answer":            "0x300",
-    # Ringtones & Volume
-    "Computer Volume":        "0x103",
-    "Desk Phone Volume":      "0x104",
-    "VoIP Interface Ringtone": "0x106",
-    "Desk Phone":             "0x107",
-    "Base Ringer Volume":     "0x10a",
-    "Mute Reminder Time":     "0x603",
-    "Mute On/Off Alerts":     "0x607",
-    "System Tone Volume":     "0x608",
-    "Volume Level Tones":     "0x609",
-    "Active Call Audio":      "0x60c",
-    # Wireless
-    "DECT Density":           "0x700",
-    "OTA Subscription":       "0x701",
-    "Power Level":            "0x702",
-    "Keep Link Up":           "0xfff4",
-    # Sensors & Presence
-    "Wearing Sensor":         "0xa00",
-    "Enable Audio Sensing":   "0xa00",
-    "Dialtone On/Off":        "0xa01",
-    # Advanced / Audio
-    "Anti-Startle":           "0x504",
-    "Anti Startle 2":         "0x505",
-    "Noise Exposure":         "0x500",
-    "Hours on Phone Per Day": "0x501",
-    "Multiband Expander":     "0x802",
-}
+# Build reverse maps: name → hex_id, hex_id → name
+_NAME_TO_ID = {v["name"]: k for k, v in ALL_SETTING_DEFS.items()}
+_ID_TO_NAME = {k: v["name"] for k, v in ALL_SETTING_DEFS.items()}
+# Legacy aliases
+_NAME_TO_ID["Wearing Sensor"] = "0xa00"
+_NAME_TO_ID["Restore Defaults"] = "0x90a"
+
+
+def setting_name_to_id(name):
+    """Convert a setting name to its native hex ID."""
+    return _NAME_TO_ID.get(name)
+
+
+def setting_id_to_name(hex_id):
+    """Convert a native hex ID to its setting name."""
+    return _ID_TO_NAME.get(hex_id)
+
+
+def build_dynamic_profile(hex_ids):
+    """Build a settings profile from a list of hex IDs a device reports.
+
+    Returns a list of setting defs compatible with lens_settings.settings_to_api_format().
+    Only includes settings that have matching Poly Studio renderer entries.
+    """
+    import json
+    from pathlib import Path
+
+    # Load settingsCategories to check which IDs will render
+    try:
+        cats = json.loads((Path(__file__).parent / "data" / "settingsCategories.json").read_text())
+        renderable = set()
+        for cat in cats:
+            for s in cat.get("settings", []):
+                renderable.add(s["id"])
+                for sub in s.get("subsettings", []):
+                    renderable.add(sub["id"])
+    except Exception:
+        renderable = None  # Allow all if can't load
+
+    profile = []
+    for hex_id in hex_ids:
+        defn = ALL_SETTING_DEFS.get(hex_id)
+        if not defn:
+            continue
+        # Only include if the renderer can display it
+        if renderable is not None and defn["name"] not in renderable:
+            continue
+        entry = {"name": defn["name"], "type": defn["type"], "default": defn["default"]}
+        if "choices" in defn:
+            entry["choices"] = defn["choices"]
+        profile.append(entry)
+
+    return profile
 
 
 def setting_name_to_id(name):

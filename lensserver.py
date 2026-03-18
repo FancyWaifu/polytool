@@ -510,6 +510,9 @@ class LensServer:
             "settings": metadata,
         }
 
+    # Cache of dynamic settings profiles built from native bridge data
+    _dynamic_profiles = {}  # device_id → [setting_defs]
+
     def _get_device_settings_formatted(self, device_id):
         """Get settings metadata + values in LensServiceApi format."""
         from lens_settings import (get_settings_for_device, settings_to_api_format,
@@ -522,7 +525,12 @@ class LensServer:
         pid = ptd.get("pid", 0)
         family = get_device_family(usage_page, dfu_executor, pid=pid)
 
-        settings_defs = get_settings_for_device(usage_page, dfu_executor, pid=pid)
+        # For native bridge devices, use dynamic profile built from actual device capabilities
+        if ptd.get("_native_id") and device_id in self._dynamic_profiles:
+            settings_defs = self._dynamic_profiles[device_id]
+        else:
+            settings_defs = get_settings_for_device(usage_page, dfu_executor, pid=pid)
+
         current_values = self._device_settings_cache.get(device_id, {})
 
         # DECT/Voyager settings are writable when native bridge is available
@@ -826,13 +834,9 @@ class LensServer:
         self._populate_native_settings_cache(bridge)
 
     def _populate_native_settings_cache(self, bridge):
-        """Query native bridge for current setting values and populate cache."""
-        from native_bridge import DECT_SETTING_IDS, VOYAGER_SETTING_IDS
-
-        # Build reverse map: hex_id → setting_name (merge both maps)
-        id_to_name = {}
-        for name, hex_id in {**DECT_SETTING_IDS, **VOYAGER_SETTING_IDS}.items():
-            id_to_name[hex_id] = name
+        """Query native bridge for current setting values, populate cache,
+        and build dynamic settings profiles for each device."""
+        from native_bridge import setting_id_to_name, build_dynamic_profile
 
         for nid in bridge.get_devices():
             bridge.get_settings(nid)
@@ -841,7 +845,7 @@ class LensServer:
         time.sleep(3)
         bridge.recv(timeout=1)
 
-        # Map native IDs to our device IDs and populate cache
+        # Map native IDs to our device IDs and populate cache + dynamic profiles
         for did, dev in self.devices.items():
             ptd = dev.get("_polytool_dev", {})
             native_id = ptd.get("_native_id", "")
@@ -852,11 +856,17 @@ class LensServer:
             if not native_values:
                 continue
 
+            # Build dynamic profile from the hex IDs this device actually supports
+            hex_ids = list(native_values.keys())
+            profile = build_dynamic_profile(hex_ids)
+            if profile:
+                self._dynamic_profiles[did] = profile
+
+            # Populate settings cache with actual values
             cache = {}
             for hex_id, val in native_values.items():
-                setting_name = id_to_name.get(hex_id)
+                setting_name = setting_id_to_name(hex_id)
                 if setting_name:
-                    # Convert string bools
                     if val == "true":
                         val = True
                     elif val == "false":
