@@ -411,8 +411,13 @@ class LensServer:
         """Handle SetDeviceSetting."""
         device_id = msg.get("deviceId", "")
         name = msg.get("name", "")
-        value = msg.get("valueBool", msg.get("valueInt", msg.get("valueFloat",
-                msg.get("valueString", msg.get("valueEnum")))))
+        # Poly Studio sends value in various fields depending on type
+        value = msg.get("valueBool",
+                msg.get("valueInt",
+                msg.get("valueFloat",
+                msg.get("valueString",
+                msg.get("valueEnum",
+                msg.get("value"))))))  # fallback to generic 'value'
 
         # Store in cache
         if device_id not in self._device_settings_cache:
@@ -733,12 +738,18 @@ class LensServer:
             from native_bridge import NativeBridge
             bridge = NativeBridge()
             bridge.start()
-            # Wait for device discovery
+            # Wait for device discovery (poll until device appears or timeout)
             import time
-            time.sleep(5)
+            for _ in range(20):
+                time.sleep(0.5)
+                bridge.recv(timeout=0.1)
+                if bridge.get_devices():
+                    break
             self._native_bridge = bridge
             devs = bridge.get_devices()
             print(f"  Native bridge: {len(devs)} device(s)")
+            for did, dev in devs.items():
+                print(f"    native id={did}: {dev.get('name', '?')}")
             return bridge
         except Exception as e:
             print(f"  Native bridge unavailable: {e}")

@@ -150,10 +150,17 @@ class NativeBridge:
                 msg_type = msg.get("messageType", "?")
                 print(f"  ← Native: {msg_type}: {msg_str[:150]}")
 
-                # Track devices
-                if msg_type == "DeviceStateChanged":
+                # Track devices from DeviceList and DeviceStateChanged
+                if msg_type == "DeviceList":
+                    payload = msg.get("payload", [])
+                    if isinstance(payload, list):
+                        for dev in payload:
+                            dev_id = str(dev.get("id", ""))
+                            if dev_id:
+                                self._devices[dev_id] = dev
+                elif msg_type == "DeviceStateChanged":
                     payload = msg.get("payload", {})
-                    dev_id = str(payload.get("deviceId", ""))
+                    dev_id = str(payload.get("deviceId", "") or payload.get("id", ""))
                     if dev_id:
                         self._devices[dev_id] = payload
 
