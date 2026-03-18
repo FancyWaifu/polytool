@@ -839,12 +839,21 @@ class LensServer:
             from native_bridge import NativeBridge
             bridge = NativeBridge()
             bridge.start()
-            # Wait for device discovery (poll until device appears or timeout)
+            # Wait for device discovery — BT devices take longer than USB.
+            # Keep polling until no new devices appear for 3 seconds.
             import time
-            for _ in range(20):
+            last_count = 0
+            stable_ticks = 0
+            for _ in range(30):  # max 15 seconds
                 time.sleep(0.5)
                 bridge.recv(timeout=0.1)
-                if bridge.get_devices():
+                count = len(bridge.get_devices())
+                if count > last_count:
+                    last_count = count
+                    stable_ticks = 0
+                else:
+                    stable_ticks += 1
+                if stable_ticks >= 6 and count > 0:  # 3s of no new devices
                     break
             self._native_bridge = bridge
             devs = bridge.get_devices()
