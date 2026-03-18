@@ -670,6 +670,97 @@ class LensServer:
             print(f"  Device discovery error: {e}")
             return set()
 
+    def discover_native_devices(self):
+        """Discover additional devices via native bridge (BT headsets, etc.)."""
+        try:
+            from native_bridge import find_components_dir
+            if not find_components_dir():
+                return
+        except Exception:
+            return
+
+        bridge = self._get_native_bridge()
+        if not bridge:
+            return
+
+        native_devs = bridge.get_devices()
+        for nid, ndev in native_devs.items():
+            # Skip devices we already found via USB
+            pid = ndev.get("pid", 0)
+            name = ndev.get("name", "")
+            model_id = ndev.get("modelId", "")
+
+            # Check if we already have this device (by PID match)
+            already_have = any(
+                d.get("pid") == str(pid) or d.get("productId") == model_id.lower()
+                for d in self.devices.values()
+            )
+            if already_have:
+                continue
+
+            # Generate a stable device ID from native ID
+            device_id = f"{int(nid) & 0xFFFFFFFF:08X}"
+
+            fw = ndev.get("firmwareVersion", {})
+            fw_display = fw.get("bluetooth", "") or fw.get("usb", "") or fw.get("headset", "")
+
+            # Find serial
+            serial = ""
+            for sn in ndev.get("serialNumber", []):
+                if sn.get("type") == "genes":
+                    val = sn.get("value", {})
+                    serial = val.get("headset", "") or val.get("base", "")
+                    break
+
+            self.devices[device_id] = {
+                "deviceId": device_id,
+                "parentId": "",
+                "productName": name,
+                "systemName": name,
+                "deviceName": name,
+                "manufacturerName": ndev.get("manufacturerName", "Plantronics"),
+                "displaySerialNumber": serial,
+                "buildCode": "",
+                "firmwareVersion": fw_display,
+                "serialNumber": serial,
+                "tattooSerialNumber": serial,
+                "deviceType": "Headset",
+                "connected": True,
+                "attached": True,
+                "pid": str(pid),
+                "vid": str(ndev.get("vid", 0)),
+                "productId": model_id.lower() if model_id else f"{pid:04x}",
+                "macAddress": "",
+                "bluetoothAddress": "",
+                "hardwareRevision": "",
+                "headsetVersion": fw.get("headset", ""),
+                "baseVersion": fw.get("base", ""),
+                "usbVersion": fw.get("usb", ""),
+                "firmwareComponents": fw,
+                "peerDevices": [],
+                "connectionType": "Bluetooth",
+                "connectionDetails": [{"type": "Bluetooth", "handledBy": "Native Bridge"}],
+                "hardwareModel": {"supportedByClients": []},
+                "hasChargeCase": ndev.get("hasChargeCase", False),
+                "deviceEncryption": "Unknown",
+                "dfuMode": False,
+                "isAbleToBePrimaryForCallControl": ndev.get("canBePrimary", True),
+                "isMuted": False,
+                "isInCall": False,
+                "state": "Online",
+                "supportData": {"state": "Supported"},
+                "multiComponentState": None,
+                "lastAttachedUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "_polytool_dev": {
+                    "path": b"",
+                    "usage_page": 0,
+                    "dfu_executor": "btNeoDfu",
+                    "pid": pid,
+                    "_native_id": nid,
+                },
+            }
+            print(f"    {name} (BT via native bridge, fw {fw_display})")
+
     def read_device_settings(self, device_id):
         """Read settings for a device via our HID code."""
         dev = self.devices.get(device_id, {})
@@ -779,11 +870,24 @@ class LensServer:
             return False
 
         # Find the native device ID (int64 from the native library)
-        native_dev_id = None
-        for nid, ndev in bridge.get_devices().items():
-            if nid and nid != "":
-                native_dev_id = nid
-                break
+        dev = self.devices.get(device_id, {})
+        ptd = dev.get("_polytool_dev", {})
+        native_dev_id = ptd.get("_native_id")
+
+        # Fallback: match by PID against native bridge devices
+        if not native_dev_id:
+            dev_pid = int(dev.get("pid", 0))
+            for nid, ndev in bridge.get_devices().items():
+                if nid and ndev.get("pid") == dev_pid:
+                    native_dev_id = nid
+                    break
+
+        # Last resort: use first available native device
+        if not native_dev_id:
+            for nid in bridge.get_devices():
+                if nid:
+                    native_dev_id = nid
+                    break
 
         if not native_dev_id:
             print(f"  DECT write: no native device ID")
@@ -816,12 +920,18 @@ def main():
     print(f"\n  LensServer — Poly Lens Replacement")
     print(f"  {'='*40}")
 
-    # Discover devices
-    print(f"\n  Scanning for devices...")
+    # Discover devices (USB first, then BT via native bridge)
+    print(f"\n  Scanning for USB devices...")
     ids = server.discover_devices()
-    print(f"  Found {len(ids)} device(s)")
+    print(f"  Found {len(ids)} USB device(s)")
+
+    print(f"  Scanning for BT devices via native bridge...")
+    server.discover_native_devices()
+
+    print(f"  Total: {len(server.devices)} device(s)")
     for did, dev in server.devices.items():
-        print(f"    {dev['productName']} (fw {dev['firmwareVersion']})")
+        conn = "BT" if dev.get("connectionType") == "Bluetooth" else "USB"
+        print(f"    {dev['productName']} (fw {dev['firmwareVersion']}) [{conn}]")
 
     # Start server
     print(f"\n  Starting TCP server...")
