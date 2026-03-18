@@ -545,17 +545,107 @@ class LensServer:
         return settings_to_api_format(settings_defs, current_values, family=family,
                                       force_writable=force_writable)
 
+    # Cache: device_id → {version, statuses, releaseNoteUrl}
+    _dfu_cache = {}
+
     def on_get_dfu_status(self, msg, client_sock):
-        """Handle GetDeviceDFUStatus."""
+        """Handle GetDeviceDFUStatus — check Poly Cloud for firmware updates."""
         device_id = msg.get("deviceId", "")
         dev = self.devices.get(device_id, {})
+
+        # Return cached result if available
+        if device_id in self._dfu_cache:
+            cached = self._dfu_cache[device_id]
+            return {
+                "type": "DeviceDFUStatus",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+                **cached,
+            }
+
+        # Check cloud in background to avoid blocking
+        import threading
+        def _check():
+            result = self._check_firmware_update(device_id)
+            self._dfu_cache[device_id] = result
+            # Push the status to all connected clients
+            self.broadcast({
+                "type": "DeviceDFUStatus",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+                **result,
+            })
+            status_str = ", ".join(result.get("statuses", []))
+            print(f"  Firmware check {device_id}: {status_str}")
+
+        threading.Thread(target=_check, daemon=True).start()
+
+        # Return current version while checking
         return {
             "type": "DeviceDFUStatus",
             "apiVersion": API_VERSION,
             "deviceId": device_id,
-            "version": dev.get("firmwareVersion", "unknown"),
-            "status": "UpToDate",
+            "version": "",
+            "statuses": ["AvailableFirmwareVersionEqual"],
+            "releaseNoteUrl": "",
         }
+
+    def _check_firmware_update(self, device_id):
+        """Check Poly Cloud for available firmware update."""
+        dev = self.devices.get(device_id, {})
+        current_fw = dev.get("firmwareVersion", "")
+        pid = dev.get("productId", "")
+        pid_query = pid.lstrip("0") or pid
+
+        if not pid_query:
+            return {"version": current_fw, "statuses": ["AvailableFirmwareVersionEqual"], "releaseNoteUrl": ""}
+
+        try:
+            import requests
+            query = '''query ($pid: String!) {
+              availableProductSoftwareByPid(pid: $pid) {
+                version
+                publishDate
+                releaseChannel
+                latest
+                productBuild { archiveUrl }
+                product { name }
+              }
+            }'''
+            resp = requests.post(
+                "https://api.silica-prod01.io.lens.poly.com/graphql",
+                json={"query": query, "variables": {"pid": pid_query}},
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+            data = resp.json()
+            sw = (data.get("data") or {}).get("availableProductSoftwareByPid")
+            if not sw:
+                return {"version": "", "statuses": ["AvailableFirmwareVersionEqual"], "releaseNoteUrl": ""}
+
+            cloud_version = sw.get("version", "")
+
+            # Compare versions
+            from polytool import _normalize_version
+            current_norm = _normalize_version(current_fw)
+            cloud_norm = _normalize_version(cloud_version)
+
+            if cloud_norm > current_norm:
+                statuses = ["AvailableFirmwareVersionHigher"]
+            elif cloud_norm < current_norm:
+                statuses = ["AvailableFirmwareVersionLower"]
+            else:
+                statuses = ["AvailableFirmwareVersionEqual"]
+
+            return {
+                "version": cloud_version,
+                "statuses": statuses,
+                "releaseNoteUrl": "",
+            }
+
+        except Exception as e:
+            print(f"  Firmware check error for {device_id}: {e}")
+            return {"version": "", "statuses": ["AvailableFirmwareVersionEqual"], "releaseNoteUrl": ""}
 
     def on_get_library_version(self, msg, client_sock):
         return {
