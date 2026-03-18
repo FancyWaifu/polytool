@@ -54,6 +54,8 @@ class LensServer:
         self.running = False
         self._lock = threading.Lock()
 
+    _original_port = None  # saved port from real LensService
+
     def start(self):
         """Start the TCP server."""
         self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -63,12 +65,43 @@ class LensServer:
         self.port = self.server_sock.getsockname()[1]
         self.running = True
 
-        # Write port file so Poly Studio can find us
+        # Save original port file (so we can restore it on exit)
+        try:
+            if PORT_FILE.exists():
+                self._original_port = PORT_FILE.read_text().strip()
+        except Exception:
+            pass
+
+        # Write our port file so Poly Studio can find us
         PORT_FILE_DIR.mkdir(parents=True, exist_ok=True)
         PORT_FILE.write_text(str(self.port))
 
+        # Register cleanup for any exit path (Ctrl+C, kill, crash)
+        import atexit
+        atexit.register(self._cleanup_port_file)
+        import signal
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(sig, lambda s, f: self._signal_shutdown())
+
         print(f"  Listening on port {self.port}")
         print(f"  Port file: {PORT_FILE}")
+        if self._original_port:
+            print(f"  Original LCS port saved: {self._original_port}")
+
+    def _signal_shutdown(self):
+        """Handle SIGTERM/SIGINT — stop cleanly."""
+        self.running = False
+
+    def _cleanup_port_file(self):
+        """Restore original port file or remove ours."""
+        try:
+            if self._original_port:
+                PORT_FILE.write_text(self._original_port)
+                print(f"  Restored original LCS port: {self._original_port}")
+            else:
+                PORT_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     def stop(self):
         """Stop the server."""
@@ -80,11 +113,7 @@ class LensServer:
                 client.close()
             except:
                 pass
-        # Remove port file
-        try:
-            PORT_FILE.unlink(missing_ok=True)
-        except:
-            pass
+        self._cleanup_port_file()
 
     def accept_clients(self):
         """Accept client connections in a loop."""
