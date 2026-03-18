@@ -217,101 +217,103 @@ def api_settings_write(dev_id):
     return jsonify({"success": success, "name": name, "value": value, "source": "hid"})
 
 
-# ── Clockwork Integration ─────────────────────────────────────────────────────
+# ── Clockwork/LensAPI Integration ─────────────────────────────────────────────
 
-_clockwork_conn = None
-_clockwork_devices = {}  # device_id → clockwork device_id mapping
+_lens_client = None
+_lens_devices = {}  # our device_id → LensAPI device_id mapping
 
 
-def _get_clockwork():
-    """Get or create a Clockwork connection. Returns None if unavailable."""
-    global _clockwork_conn, _clockwork_devices
+def _get_lens_client():
+    """Get or create a LensAPI client. Returns None if unavailable."""
+    global _lens_client, _lens_devices
 
-    if _clockwork_conn is not None:
-        return _clockwork_conn
+    if _lens_client is not None:
+        return _lens_client
 
     try:
-        from clockwork_client import ClockworkConnection, get_socket_path
-        socket_path = get_socket_path()
-        if not socket_path:
+        from lensapi import LensAPIClient, find_lcs_port
+        port = find_lcs_port()
+        if not port:
             return None
 
-        cw = ClockworkConnection()
-        cw.connect(socket_path)
-        cw.handshake()
-        cw.collect_devices(timeout=3)
+        client = LensAPIClient()
+        client.connect(port)
+        client.register()
+        time.sleep(1)
+        client.recv_all(timeout=2)
+        client.get_device_list()
 
-        if cw.devices:
-            _clockwork_conn = cw
-            # Map our device IDs to Clockwork device IDs
-            _clockwork_devices = {}
-            for cw_id, cw_dev in cw.devices.items():
-                # Match by PID or serial
-                cw_pid = cw_dev.get("product_id", "")
-                cw_serial = cw_dev.get("serial_number", "")
+        if client.devices:
+            _lens_client = client
+            _lens_devices = {}
+            for cw_id, cw_dev in client.devices.items():
+                cw_pid = cw_dev.get("pid", cw_dev.get("productId", ""))
+                cw_serial = cw_dev.get("serialNumber", "")
                 devices = _get_cached_devices()
                 for d in devices:
                     if (cw_serial and cw_serial == d.serial) or \
                        (cw_pid and str(d.pid) == str(cw_pid)):
-                        _clockwork_devices[d.id] = cw_id
+                        _lens_devices[d.id] = cw_id
                         break
-            return cw
+            return client
     except Exception:
         pass
     return None
 
 
 def _clockwork_read_settings(dev):
-    """Read settings via Clockwork. Returns list of settings or None."""
-    from clockwork_client import ALL_KNOWN_SETTINGS
-
-    cw = _get_clockwork()
-    if not cw:
+    """Read settings via LensAPI. Returns list of settings or None."""
+    client = _get_lens_client()
+    if not client:
         return None
 
-    cw_device_id = _clockwork_devices.get(dev.id)
-    if not cw_device_id:
-        return None
-
-    settings = []
-    for name in ALL_KNOWN_SETTINGS:
-        try:
-            value = cw.request_setting(cw_device_id, name)
-            if value is not None:
-                # Determine type
-                if isinstance(value, bool):
-                    stype = "bool"
-                elif isinstance(value, (int, float)):
-                    stype = "range"
-                else:
-                    stype = "choice" if value in (
-                        "Default", "Bass Boost", "Bright", "Warm",
-                        "Ignore", "Ring", "Last Number Redial",
-                    ) else "text"
-
-                entry = {"name": name, "value": value, "type": stype, "writable": True}
-                if stype == "range":
-                    entry["min"] = 0
-                    entry["max"] = 10
-                settings.append(entry)
-        except Exception:
-            pass
-
-    return settings if settings else None
-
-
-def _clockwork_write_setting(dev, name, value):
-    """Write a setting via Clockwork. Returns True/False or None if unavailable."""
-    cw = _get_clockwork()
-    if not cw:
-        return None
-
-    cw_device_id = _clockwork_devices.get(dev.id)
+    cw_device_id = _lens_devices.get(dev.id)
     if not cw_device_id:
         return None
 
     try:
-        return cw.write_setting(cw_device_id, name, value)
+        raw_settings = client.get_device_settings(cw_device_id)
+        if not raw_settings:
+            return None
+
+        settings = []
+        for s in raw_settings:
+            name = s.get("name", "")
+            value = s.get("value", s.get("valueBool", s.get("valueInt",
+                    s.get("valueString", s.get("valueEnum")))))
+            if value is None:
+                continue
+
+            if isinstance(value, bool):
+                stype = "bool"
+            elif isinstance(value, (int, float)):
+                stype = "range"
+            else:
+                stype = "text"
+
+            entry = {"name": name, "value": value, "type": stype, "writable": True}
+            if stype == "range":
+                entry["min"] = 0
+                entry["max"] = 10
+            settings.append(entry)
+
+        return settings if settings else None
+    except Exception:
+        return None
+
+
+def _clockwork_write_setting(dev, name, value):
+    """Write a setting via LensAPI. Returns True/False or None if unavailable."""
+    client = _get_lens_client()
+    if not client:
+        return None
+
+    cw_device_id = _lens_devices.get(dev.id)
+    if not cw_device_id:
+        return None
+
+    try:
+        return client.set_device_setting(cw_device_id, name, value)
     except Exception:
         return None
 

@@ -322,3 +322,92 @@ POLY LENS COMPATIBILITY:
   even though C056 is NOT in Devices.config. Detection goes through
   PolyDolphin.dylib fallback probe path (newer versions).
   Our flashing preserves compatibility via identity backup/restore.
+
+
+================================================================================
+7. LENSSERVICE API (TCP Protocol for Poly Studio GUI)
+================================================================================
+
+Discovered by decompiling Poly Studio's app.asar (Electron main.js).
+
+PORT DISCOVERY:
+  macOS: ~/Library/Application Support/Poly/Lens Control Service/SocketPortNumber
+  Windows: %PROGRAMDATA%/Poly/Lens Control Service/SocketPortNumber
+  File contains the TCP port number as plain text (dynamically allocated).
+
+TRANSPORT:
+  TCP to 127.0.0.1:<port>
+  Messages: JSON delimited by SOH byte (\x01, 0x01) — NOT newline!
+  No length prefix. Messages are: JSON_STRING + \x01
+
+MESSAGE FORMAT:
+  {"type": "MessageTypeName", "apiVersion": "1.0.0", ...fields}
+  Type field routes to handler: messageHandlers[msg.type]
+
+REGISTRATION:
+  Client → Server: {"type": "RegisterClient", "apiVersion": "1.0.0",
+                     "name": "Poly Studio Desktop UI",
+                     "useEncryption": true, "publicKey": "MIIBCg..."}
+  Server → Client: {"type": "ClientRegistered", "apiVersion": "1.14.1",
+                     "serviceVersion": "1.14.1", "useEncryption": false,
+                     "configurationFlavor": "Lens Desktop"}
+  Setting useEncryption: false in response disables RSA encryption.
+
+DEVICE EVENTS (server pushes to client):
+  DeviceAttached: {"type": "DeviceAttached", "device": {<device object>}}
+  DeviceDetached: {"type": "DeviceDetached", "deviceId": "..."}
+  DeviceUpdated:  {"type": "DeviceUpdated", "device": {<device object>}}
+
+DEVICE OBJECT (required fields for GUI rendering):
+  deviceId: string (unique ID)
+  productName: string (display name)
+  deviceName: string (USB product string)
+  firmwareVersion: string
+  serialNumber: string
+  deviceType: string (PascalCase: "Headset", "Speakerphone", etc.)
+  connected: bool (true)
+  attached: bool (true)
+  state: string ("Online" for connected tab, "Offline" for disconnected)
+  supportData: {"state": "Supported"} (REQUIRED — renderer crashes without it)
+  productId: string (hex PID lowercase)
+  pid: string
+  vid: string
+  connectionType: string ("USB")
+  peerDevices: [] (empty array)
+  firmwareComponents: [] (empty array)
+  lastAttachedUtc: string (ISO timestamp)
+
+SETTINGS:
+  GetDeviceSettings → DeviceSettings (array of {name, value, valueBool, valueInt, ...})
+  GetDeviceSetting → DeviceSetting (single setting with {setting: {name, value}})
+  SetDeviceSetting → DeviceSettingUpdated
+  GetDeviceSettingsMetadata → DeviceSettingsMetadata
+
+  DeviceSetting response MUST wrap in "setting" object:
+    {"type": "DeviceSetting", "deviceId": "...", "setting": {"name": "...", "value": ...}}
+
+PRODUCT IMAGES:
+  Requested via: GetDeviceSetting with name="Product Images"
+  Value must be a JSON string containing image URLs.
+  Simplest format: '[{"url": "https://static.lens.poly.com/images/..."}]'
+  Images fetched from Poly Cloud: hardwareProduct(id: "<pid>") { productImages { edges { node { url } } } }
+
+SOFTWARE UPDATE:
+  GetAvailableSoftwareUpdate → AvailableSoftwareUpdate
+  Response needs: availableVersion (string, not null!), statuses (array), component (string)
+
+KEY FINDINGS:
+  - GUI crashes if supportData is missing (renderer error)
+  - GUI crashes if availableVersion is null (startsWith on null)
+  - GUI crashes if DeviceSetting response lacks setting.name
+  - GUI filters connected devices by: attached === true && state === "Online"
+  - Device priority order: Headset=1, Speakerphone=1, VideoEndPoint=2, Dock=3, etc.
+  - GUI client name: "Poly Studio Desktop UI"
+  - GUI API version: "1.0.0" (not 1.14.1)
+
+LENSSERVER (our implementation):
+  lensserver.py — drop-in replacement for Poly's LensService
+  Writes port file, accepts TCP connections, speaks LensServiceApi
+  Discovers devices via HID, fetches images from Poly Cloud
+  Live hotplug detection (5s scan interval)
+  Poly Studio GUI connects and shows devices with product images
