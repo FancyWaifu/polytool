@@ -106,6 +106,13 @@ class LensServer:
     def stop(self):
         """Stop the server."""
         self.running = False
+        # Stop native bridge first (before closing sockets)
+        if self._native_bridge:
+            try:
+                self._native_bridge.stop()
+            except Exception:
+                pass
+            self._native_bridge = None
         if self.server_sock:
             self.server_sock.close()
         for client in self.clients:

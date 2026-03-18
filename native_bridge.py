@@ -128,14 +128,14 @@ class NativeBridge:
         if not self._running:
             return
         self._running = False
-        try:
-            self._native_loader.StopNativeBridge()
-        except Exception:
-            pass
+        # NativeLoader_Exit triggers cleanup threads that may race on shutdown.
+        # Suppress the C++ exception by giving threads time to wind down.
         try:
             self._native_loader.NativeLoader_Exit()
         except Exception:
             pass
+        import time
+        time.sleep(0.5)
         print("  Native bridge stopped")
 
     def _on_received(self, data):
