@@ -257,12 +257,34 @@ class LensServer:
         """Handle GetDeviceSettings."""
         device_id = msg.get("deviceId", "")
         settings = self.read_device_settings(device_id)
-        return {
+
+        # Convert to LensServiceApi format
+        api_settings = []
+        for s in settings:
+            setting = {"name": s.get("name", ""), "value": s.get("value")}
+            if s.get("type") == "bool":
+                setting["valueBool"] = bool(s.get("value", False))
+            elif s.get("type") == "range":
+                setting["valueInt"] = int(s.get("value", 0)) if s.get("value") is not None else 0
+            else:
+                setting["valueString"] = str(s.get("value", ""))
+            api_settings.append(setting)
+
+        # Send settings response
+        self.send_msg(client_sock, {
             "type": "DeviceSettings",
             "apiVersion": API_VERSION,
             "deviceId": device_id,
-            "settings": settings,
-        }
+            "settings": api_settings,
+        })
+
+        # Also push metadata right after (GUI needs this to render settings tab)
+        metadata_resp = self.on_get_settings_metadata(msg, client_sock)
+        if metadata_resp and metadata_resp.get("settings"):
+            self.send_msg(client_sock, metadata_resp)
+            print(f"  → DeviceSettingsMetadata: {len(metadata_resp['settings'])} settings")
+
+        return None  # already sent
 
     def on_get_device_setting(self, msg, client_sock):
         """Handle GetDeviceSetting."""
@@ -288,7 +310,8 @@ class LensServer:
             }
 
         if name == "Product Images":
-            return make_setting_response(name, None)
+            image_data = self.get_product_images(device_id)
+            return make_setting_response(name, image_data)
 
         if name == "Ear Cushion Type":
             return make_setting_response(name, None)
@@ -334,12 +357,39 @@ class LensServer:
 
         metadata = []
         for s in settings:
-            metadata.append({
+            stype = s.get("type", "string")
+            data_type = {"bool": "bool", "range": "int", "choice": "enum",
+                         "text": "string"}.get(stype, "string")
+
+            meta = {
                 "name": s.get("name", ""),
-                "dataType": s.get("type", "string"),
-                "readable": True,
-                "writable": s.get("writable", True),
-            })
+                "meta": {
+                    "name": s.get("name", ""),
+                    "dataType": data_type,
+                    "readable": True,
+                    "writable": s.get("writable", True),
+                    "storeType": "DeviceSettings",
+                    "compound": None,
+                    "hidden": False,
+                },
+                "value": s.get("value"),
+                "value_int": int(s["value"]) if stype == "range" and s.get("value") is not None else None,
+                "value_bool": bool(s["value"]) if stype == "bool" else None,
+                "value_string": str(s["value"]) if stype == "text" and s.get("value") is not None else None,
+                "value_enum": str(s["value"]) if stype == "choice" and s.get("value") is not None else None,
+                "value_compound": None,
+                "value_struct_array": None,
+                "auto_mode": False,
+                "default_struct_array_value": None,
+            }
+
+            if stype == "choice" and s.get("choices"):
+                meta["meta"]["possibleValues"] = s["choices"]
+            if stype == "range":
+                meta["meta"]["minValue"] = s.get("min", 0)
+                meta["meta"]["maxValue"] = s.get("max", 10)
+
+            metadata.append(meta)
 
         return {
             "type": "DeviceSettingsMetadata",
@@ -401,6 +451,46 @@ class LensServer:
         }
 
     # ── Device I/O (delegated to our HID code) ───────────────────────
+
+    _image_cache = {}  # pid → image JSON string
+
+    def get_product_images(self, device_id):
+        """Fetch product images from Poly Cloud for a device."""
+        dev = self.devices.get(device_id, {})
+        pid = dev.get("productId", "")
+        if not pid:
+            return None
+
+        if pid in self._image_cache:
+            return self._image_cache[pid]
+
+        try:
+            import requests
+            query = '''query ($id: ID!) {
+              hardwareProduct(id: $id) {
+                productImages { edges { node { url } } }
+              }
+            }'''
+            resp = requests.post(
+                "https://api.silica-prod01.io.lens.poly.com/graphql",
+                json={"query": query, "variables": {"id": pid}},
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+            data = resp.json()
+            images = data.get("data", {}).get("hardwareProduct", {}).get("productImages", {}).get("edges", [])
+
+            if images:
+                # Return as JSON string — GUI parses it
+                url_list = [{"url": img["node"]["url"]} for img in images if img.get("node", {}).get("url")]
+                result = json.dumps(url_list)
+                self._image_cache[pid] = result
+                print(f"  Images for {pid}: {len(url_list)} found")
+                return result
+        except Exception as e:
+            print(f"  Image fetch error: {e}")
+
+        return None
 
     def discover_devices(self):
         """Scan for Poly devices using our polytool code."""
