@@ -109,31 +109,23 @@ VOYAGER_BT_SETTINGS = [
     {"name": "Answering Call", "type": "bool", "default": True},
     {"name": "Auto-Answer", "type": "bool", "default": False},
     {"name": "Second Incoming Call", "type": "enum", "choices": ["ignore", "once", "continuous"], "default": "once"},
-    {"name": "Ring Tone", "type": "bool", "default": True},
+    {"name": "Ringtone", "type": "bool", "default": True},
     {"name": "Online Indicator", "type": "bool", "default": True},
     {"name": "Smart Audio Transfer", "type": "bool", "default": True},
-    {"name": "Call Announcement", "type": "bool", "default": True},
+    {"name": "Notification Tones", "type": "bool", "default": False},
+    {"name": "Mute On/Off Alerts", "type": "enum", "choices": ["voice", "singleTone", "doubleTone"], "default": "voice"},
+    {"name": "Mute Off Alert", "type": "enum", "choices": ["off", "timed", "voiceAudible", "voiceVisible", "voiceVisibleAndAudible"], "default": "voiceAudible"},
+    {"name": "Mute Reminder Time", "type": "enum", "choices": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"], "default": "15"},
     # ── Ringtones & Volume ──
     {"name": "Sidetone", "type": "enum", "choices": ["low", "medium", "high"], "default": "medium"},
     {"name": "Volume Level Tones", "type": "enum", "choices": ["atEveryLevel", "minMaxOnly"], "default": "minMaxOnly"},
-    {"name": "Volume Tone Min/Max", "type": "enum", "choices": ["tone", "voice"], "default": "voice"},
-    {"name": "Mute On/Off Alerts", "type": "enum", "choices": ["voice", "singleTone", "doubleTone"], "default": "voice"},
-    {"name": "Mute Alert", "type": "enum", "choices": ["off", "timed", "voiceAudible", "voiceVisible", "voiceVisibleAndAudible"], "default": "voiceAudible"},
-    {"name": "Mute Reminder Time", "type": "enum", "choices": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"], "default": "15"},
     {"name": "Active Call Audio", "type": "bool", "default": True},
-    {"name": "Notification Tones", "type": "bool", "default": False},
     # ── Wireless ──
-    {"name": "Audio Bandwidth Mobile", "type": "enum", "choices": ["narrowband", "wideband"], "default": "wideband"},
+    {"name": "Audio Bandwidth VoIP", "type": "enum", "choices": ["narrowband", "wideband"], "default": "wideband"},
     # ── Advanced / Audio ──
     {"name": "Anti Startle 2", "type": "bool", "default": False},
     {"name": "Noise Exposure", "type": "enum", "choices": ["off", "85db", "80db"], "default": "off"},
     {"name": "Hours on Phone Per Day", "type": "enum", "choices": ["2", "4", "6", "8"], "default": "8"},
-    {"name": "TWA Reporting", "type": "bool", "default": False},
-    {"name": "TWA Reporting Period", "type": "enum", "choices": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], "default": "1"},
-    {"name": "Acoustic Incident Reporting", "type": "bool", "default": False},
-    {"name": "Conversation Dynamics Reporting", "type": "bool", "default": False},
-    {"name": "Conversation Dynamics Period", "type": "enum", "choices": ["1", "10", "20", "30", "40", "50", "60"], "default": "1"},
-    {"name": "Link Quality Reporting", "type": "bool", "default": False},
 ]
 
 VOYAGER_BASE_SETTINGS = [
