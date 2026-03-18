@@ -169,6 +169,9 @@ class LensServer:
                             msg = json.loads(line)
                             msg_type = msg.get("type", "?")
                             print(f"  ← {msg_type}: {json.dumps(msg)[:150]}")
+                            if self.dump_mode and self.dump_file:
+                                self.dump_file.write(json.dumps({"dir": "IN", "msg": msg}) + "\n")
+                                self.dump_file.flush()
 
                             if msg_type in ("RegisterClient", "RegisterEndUserApplication") and not registered:
                                 registered = True
@@ -207,11 +210,17 @@ class LensServer:
         except:
             pass
 
+    dump_mode = False
+    dump_file = None
+
     def send_msg(self, client_sock, msg):
         """Send a JSON message to a client (SOH-delimited)."""
         try:
             data = json.dumps(msg) + MSG_DELIM
             client_sock.sendall(data.encode("utf-8"))
+            if self.dump_mode and self.dump_file:
+                self.dump_file.write(json.dumps({"dir": "OUT", "msg": msg}) + "\n")
+                self.dump_file.flush()
         except:
             pass
 
@@ -303,15 +312,7 @@ class LensServer:
         device_id = msg.get("deviceId", "")
         metadata, values = self._get_device_settings_formatted(device_id)
 
-        # Send settings values
-        self.send_msg(client_sock, {
-            "type": "DeviceSettings",
-            "apiVersion": API_VERSION,
-            "deviceId": device_id,
-            "settings": values,
-        })
-
-        # Push metadata right after (GUI needs this for settings tab)
+        # Push metadata FIRST (GUI needs this to know what controls to render)
         if metadata:
             self.send_msg(client_sock, {
                 "type": "DeviceSettingsMetadata",
@@ -320,6 +321,14 @@ class LensServer:
                 "settings": metadata,
             })
             print(f"  → DeviceSettingsMetadata: {len(metadata)} settings")
+
+        # Then send settings values
+        self.send_msg(client_sock, {
+            "type": "DeviceSettings",
+            "apiVersion": API_VERSION,
+            "deviceId": device_id,
+            "settings": values,
+        })
 
         return None  # already sent
 
@@ -538,8 +547,13 @@ class LensServer:
                 self.devices[device_id] = {
                     # camelCase — matches .NET JsonSerializer default naming
                     "deviceId": device_id,
+                    "parentId": "",
                     "productName": dev.friendly_name or dev.product_name,
+                    "systemName": dev.product_name,
                     "deviceName": dev.product_name,
+                    "manufacturerName": dev.manufacturer or "Plantronics",
+                    "displaySerialNumber": dev.serial or "",
+                    "buildCode": "",
                     "firmwareVersion": dev.firmware_display,
                     "serialNumber": dev.serial or "",
                     "tattooSerialNumber": dev.serial or "",
@@ -555,9 +569,24 @@ class LensServer:
                     "headsetVersion": dev.firmware_display,
                     "baseVersion": "",
                     "usbVersion": dev.firmware_display,
-                    "firmwareComponents": [],
+                    "firmwareComponents": {
+                        "usbVersion": dev.firmware_display,
+                        "baseVersion": "",
+                        "tuningVersion": "",
+                        "picVersion": "",
+                        "cameraVersion": "",
+                        "headsetVersion": "",
+                        "headsetLanguageVersion": "",
+                        "bluetoothVersion": "",
+                        "setIdVersion": "",
+                    },
                     "peerDevices": [],
                     "connectionType": "USB",
+                    "connectionDetails": [{"type": "USB", "handledBy": "Legacy Library"}],
+                    "hardwareModel": {"supportedByClients": []},
+                    "hasChargeCase": False,
+                    "deviceEncryption": "Unknown",
+                    "dfuMode": False,
                     "isAbleToBePrimaryForCallControl": True,
                     "isMuted": False,
                     "isInCall": False,
@@ -629,9 +658,14 @@ def main():
         description="LensServer — Drop-in Poly Lens Control Service replacement",
     )
     parser.add_argument("--port", type=int, default=0, help="TCP port (0=auto)")
+    parser.add_argument("--dump", action="store_true", help="Dump all messages to dump.jsonl")
     args = parser.parse_args()
 
     server = LensServer(port=args.port)
+    server.dump_mode = getattr(args, 'dump', False)
+    if server.dump_mode:
+        server.dump_file = open('dump.jsonl', 'w')
+        print(f"  Dumping all messages to dump.jsonl")
 
     print(f"\n  LensServer — Poly Lens Replacement")
     print(f"  {'='*40}")

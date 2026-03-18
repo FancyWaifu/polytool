@@ -23,41 +23,51 @@ except:
 
 
 def _choices(name):
-    """Get choice values from Poly's settings database."""
+    """Get choice keys from Poly's settings database (internal values)."""
     vals = _poly_settings.get(name, {})
     if isinstance(vals, dict):
-        return list(vals.values())
+        return list(vals.keys())
     return []
+
+
+def _choice_default(name, display_default):
+    """Convert a display value to its internal key."""
+    vals = _poly_settings.get(name, {})
+    if isinstance(vals, dict):
+        for key, display in vals.items():
+            if display == display_default:
+                return key
+    return display_default
 
 
 # ── Setting Definitions Per Device Family ─────────────────────────────────
 
 # Setting names MUST match the IDs in settingsCategories (from Poly Studio renderer)
-# The GUI only renders controls for settings it has a static definition for.
+# possible_values uses INTERNAL KEYS (not display values) — from DeviceSetting.json
 DECT_SETTINGS = [
     # Ringtones & Volume
-    {"name": "Sidetone", "type": "enum", "choices": _choices("Sidetone") or ["Low", "Medium", "High"], "default": "Medium"},
-    {"name": "Volume Level Tones", "type": "enum", "choices": _choices("Volume Level Tones") or ["At Every Level", "Minimum & Maximum Only"], "default": "At Every Level"},
+    {"name": "Sidetone", "type": "enum", "choices": _choices("Sidetone") or ["low", "medium", "high"], "default": _choice_default("Sidetone", "Medium")},
+    {"name": "Volume Level Tones", "type": "enum", "choices": _choices("Volume Level Tones") or ["all", "minMax"], "default": _choice_default("Volume Level Tones", "At Every Level")},
     {"name": "Base Ringer Volume", "type": "int", "min": 0, "max": 10, "default": 7},
-    {"name": "Desk Phone", "type": "enum", "choices": _choices("Desk Phone") or ["Sound 1", "Sound 2", "Sound 3", "Off"], "default": "Sound 1"},
+    {"name": "Desk Phone", "type": "enum", "choices": _choices("Desk Phone") or ["sound1", "sound2", "sound3", "off"], "default": _choice_default("Desk Phone", "Sound 1")},
     # Wireless
-    {"name": "DECT Density", "type": "enum", "choices": _choices("DECT Density") or ["Music", "Hybrid", "Conversation", "Narrowband"], "default": "Conversation"},
+    {"name": "DECT Density", "type": "enum", "choices": _choices("DECT Density") or ["homeMode", "enterpriseMode", "mono", "narrowBand"], "default": _choice_default("DECT Density", "Conversation")},
     {"name": "HD Voice", "type": "bool", "default": True},
-    {"name": "Power Level", "type": "enum", "choices": _choices("Power Level") or ["Low", "Medium", "High"], "default": "High"},
-    {"name": "Keep Link Up", "type": "enum", "choices": _choices("Keep Link Up") or ["Active Only During Call", "Always Active"], "default": "Active Only During Call"},
-    {"name": "Default Line Type", "type": "enum", "choices": _choices("Default Line Type") or ["Desk phone", "Computer", "Mobile"], "default": "Computer"},
-    {"name": "Second Incoming Call", "type": "enum", "choices": _choices("Second Incoming Call") or ["Ignore", "Ring Once", "Ring Continuous"], "default": "Ignore"},
+    {"name": "Power Level", "type": "enum", "choices": _choices("Power Level") or ["low", "medium", "high"], "default": _choice_default("Power Level", "High")},
+    {"name": "Keep Link Up", "type": "enum", "choices": _choices("Keep Link Up") or ["duringCall", "always"], "default": _choice_default("Keep Link Up", "Active Only During Call")},
+    {"name": "Default Line Type", "type": "enum", "choices": _choices("Default Line Type") or ["deskPhone", "computer", "mobile"], "default": _choice_default("Default Line Type", "Computer")},
+    {"name": "Second Incoming Call", "type": "enum", "choices": _choices("Second Incoming Call") or ["ignore", "once", "continuous"], "default": _choice_default("Second Incoming Call", "Ignore")},
     # Sensors & Presence
     {"name": "Wearing Sensor", "type": "bool", "default": False},
     {"name": "Auto-Answer", "type": "bool", "default": False},
-    {"name": "Active Call Audio", "type": "enum", "choices": _choices("Active Call Audio") or ["Do Nothing", "Transfer Audio to Mobile Phone", "Mute Microphone"], "default": "Do Nothing"},
+    {"name": "Active Call Audio", "type": "enum", "choices": _choices("Active Call Audio") or ["doNothing", "transferAudioToMobile", "muteMic"], "default": _choice_default("Active Call Audio", "Do Nothing")},
     # Advanced
     {"name": "Anti-Startle", "type": "bool", "default": True},
-    {"name": "Anti Startle 2", "type": "enum", "choices": _choices("Anti Startle 2") or ["Off", "Standard", "Enhanced"], "default": "Standard"},
-    {"name": "Noise Exposure", "type": "enum", "choices": _choices("Noise Exposure") or ["Limit at 85 dBA", "Limit at 80 dBA", "No Limiting"], "default": "Limit at 85 dBA"},
-    {"name": "Hours on Phone Per Day", "type": "enum", "choices": _choices("Hours on Phone Per Day") or ["2 hrs.", "4 hrs.", "6 hrs.", "8 hrs.", "Off"], "default": "Off"},
+    {"name": "Anti Startle 2", "type": "enum", "choices": _choices("Anti Startle 2") or ["off", "standard", "enhanced"], "default": _choice_default("Anti Startle 2", "Standard")},
+    {"name": "Noise Exposure", "type": "enum", "choices": _choices("Noise Exposure") or ["85db", "80db", "off"], "default": _choice_default("Noise Exposure", "Limit at 85 dBA")},
+    {"name": "Hours on Phone Per Day", "type": "enum", "choices": _choices("Hours on Phone Per Day") or ["2", "4", "6", "8", "off"], "default": _choice_default("Hours on Phone Per Day", "Off")},
     # Language
-    {"name": "Language Selection", "type": "enum", "choices": ["English", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Swedish", "Norwegian", "Danish", "Finnish", "Japanese", "Korean", "Mandarin", "Cantonese", "Russian"], "default": "English"},
+    {"name": "Language Selection", "type": "enum", "choices": ["en", "fr", "de", "es", "it", "pt", "nl", "sv", "no", "da", "fi", "ja", "ko", "zh", "yue", "ru"], "default": "en"},
 ]
 
 CX2070X_SETTINGS = [
@@ -123,37 +133,41 @@ def settings_to_api_format(settings_defs, current_values=None):
         default = s.get("default")
         value = current_values.get(name, default)
 
-        # Metadata entry (for GetDeviceSettingsMetadata)
+        # Metadata entry — matches exact format from real LensService
+        meta_obj = {
+            "type": stype,
+            "visible": True,
+            "enabled": True,
+            "read_only": False,
+            "auto_supported": False,
+            "default_value": default,
+            "possible_values": s.get("choices", []),
+            "statuses": [],
+        }
+
+        if stype == "bool":
+            meta_obj["default_bool_value"] = bool(default) if default is not None else False
+            meta_obj["possible_values"] = ["false", "true"]
+        elif stype == "int":
+            meta_obj["default_int_value"] = int(default) if default is not None else 0
+            meta_obj["range_min"] = s.get("min", 0)
+            meta_obj["range_max"] = s.get("max", 10)
+            meta_obj["range_step"] = 1
+
         meta = {
             "name": name,
-            "meta": {
-                "name": name,
-                "type": stype,
-                "visible": True,
-                "enabled": True,
-                "read_only": False,
-                "auto_supported": False,
-                "default_value": default,
-                "possible_values": s.get("choices"),
-                "range_min": s.get("min") if stype == "int" else 0,
-                "range_max": s.get("max") if stype == "int" else 0,
-                "range_step": 1 if stype == "int" else 0,
-            },
-            "value": value,
-            "value_int": int(value) if stype == "int" and value is not None else None,
-            "value_bool": bool(value) if stype == "bool" else None,
-            "value_string": None,
-            "value_enum": str(value) if stype == "enum" and value is not None else None,
-            "value_compound": None,
-            "value_struct_array": None,
-            "auto_mode": False,
-            "default_struct_array_value": None,
+            "meta": meta_obj,
         }
 
         metadata.append(meta)
 
         # Value entry (for GetDeviceSettings)
-        val_entry = {"name": name, "value": value}
+        # MUST include 'meta' — the renderer's selectMemoizedDeviceSetting
+        # calls translateBaseSetting(upsertCompoundMetadata(settingValue, ...))
+        # which checks o.meta to produce {readable, writable, storeType}.
+        # Without meta, SettingItem's render check fails:
+        #   !(S.meta?.readable || S.meta?.writable) → true → returns null
+        val_entry = {"name": name, "value": value, "meta": meta_obj}
         if stype == "bool":
             val_entry["valueBool"] = bool(value) if value is not None else False
         elif stype == "int":
