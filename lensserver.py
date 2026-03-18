@@ -462,8 +462,14 @@ class LensServer:
         settings_defs = get_settings_for_device(usage_page, dfu_executor)
         current_values = self._device_settings_cache.get(device_id, {})
 
-        # DECT settings are writable when real LCS is available for proxy
-        force_writable = (family == "dect" and self._original_port is not None)
+        # DECT settings are writable when native bridge is available
+        force_writable = False
+        if family == "dect":
+            try:
+                from native_bridge import find_components_dir
+                force_writable = find_components_dir() is not None
+            except Exception:
+                pass
 
         return settings_to_api_format(settings_defs, current_values, family=family,
                                       force_writable=force_writable)
@@ -716,70 +722,58 @@ class LensServer:
             print(f"  Settings write error: {e}")
             return False
 
-    # ── DECT LCS Proxy ───────────────────────────────────────────────────────
-    _lcs_client = None
+    # ── DECT Native Bridge ────────────────────────────────────────────────────
+    _native_bridge = None
 
-    def _get_lcs_client(self):
-        """Get a LensAPI client connected to the REAL Poly LCS."""
-        if not self._original_port:
-            return None
+    def _get_native_bridge(self):
+        """Get or initialize the native bridge for DECT settings."""
+        if self._native_bridge:
+            return self._native_bridge
         try:
-            port = int(self._original_port)
-        except (ValueError, TypeError):
-            return None
-
-        # Test if existing client is still alive
-        if self._lcs_client:
-            try:
-                self._lcs_client.sock.getpeername()
-                return self._lcs_client
-            except Exception:
-                self._lcs_client = None
-
-        # Connect fresh
-        try:
-            from lensapi import LensAPIClient
-            client = LensAPIClient()
-            client.connect(port=port)
-            client.register()
-            # Drain registration responses
-            client.recv_all(timeout=1.0)
-            self._lcs_client = client
-            print(f"  Connected to real LCS on port {port} for DECT proxy")
-            return client
+            from native_bridge import NativeBridge
+            bridge = NativeBridge()
+            bridge.start()
+            # Wait for device discovery
+            import time
+            time.sleep(5)
+            self._native_bridge = bridge
+            devs = bridge.get_devices()
+            print(f"  Native bridge: {len(devs)} device(s)")
+            return bridge
         except Exception as e:
-            print(f"  Cannot connect to real LCS (port {port}): {e}")
+            print(f"  Native bridge unavailable: {e}")
             return None
 
     def _proxy_dect_write(self, device_id, name, value):
-        """Proxy a DECT setting write through the real Poly LCS."""
-        client = self._get_lcs_client()
-        if not client:
-            print(f"  DECT write failed: real Poly LCS not available")
-            print(f"  (DECT settings require Poly Lens legacyhost to be running)")
+        """Write a DECT setting via the native bridge (direct dylib call)."""
+        bridge = self._get_native_bridge()
+        if not bridge:
+            print(f"  DECT write failed: native bridge not available")
             return False
 
-        # Map our short device ID to the PLT_ format used by real LCS
-        dev = self.devices.get(device_id, {})
-        serial = dev.get("serialNumber", device_id)
-        lcs_device_id = f"PLT_{serial}"
-
-        try:
-            result = client.set_device_setting(lcs_device_id, name, value)
-            # Read back responses
-            responses = client.recv_all(timeout=2.0)
-            # Check for success
-            for msg in responses:
-                if msg.get("type") == "DeviceSettingUpdated":
-                    print(f"  DECT proxy: {name} = {value} [OK via LCS]")
-                    return True
-            # If we got here without error, assume success
-            print(f"  DECT proxy: {name} = {value} [sent to LCS]")
-            return True
-        except Exception as e:
-            print(f"  DECT proxy error: {e}")
-            self._lcs_client = None
+        from native_bridge import setting_name_to_id
+        setting_id = setting_name_to_id(name)
+        if not setting_id:
+            print(f"  DECT write: unknown setting '{name}'")
             return False
+
+        # Find the native device ID (int64 from the native library)
+        native_dev_id = None
+        for nid, ndev in bridge.get_devices().items():
+            if nid and nid != "":
+                native_dev_id = nid
+                break
+
+        if not native_dev_id:
+            print(f"  DECT write: no native device ID")
+            return False
+
+        result = bridge.set_setting(native_dev_id, setting_id, value)
+        if result:
+            print(f"  DECT native: {name} ({setting_id}) = {value} [OK]")
+            # Wait for confirmation
+            bridge.recv(timeout=2.0)
+        return result
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
