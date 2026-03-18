@@ -75,7 +75,12 @@ class NativeBridge:
         self._message_event = threading.Event()
         self._lock = threading.Lock()
         self._devices = {}
-        self._callback_ref = None  # prevent GC of callback
+        self._battery = {}          # dev_id → {level, charging, docked}
+        self._settings_cache = {}   # dev_id → {hex_id: value}
+        self._in_call = False
+        self._muted = False
+        self._primary_device = ""
+        self._callback_ref = None   # prevent GC of callback
 
     def start(self):
         """Initialize the native bridge. Loads libraries, starts USB scanning."""
@@ -164,6 +169,38 @@ class NativeBridge:
                     if dev_id:
                         self._devices[dev_id] = payload
 
+                # Track battery state
+                elif msg_type == "BatteryState":
+                    payload = msg.get("payload", {})
+                    dev_id = str(payload.get("deviceId", ""))
+                    if dev_id:
+                        self._battery[dev_id] = {
+                            "level": payload.get("batteryLevel", -1),
+                            "charging": payload.get("chargingState", False),
+                            "docked": payload.get("docked", False),
+                        }
+
+                # Track setting values from DeviceSettings responses
+                elif msg_type == "DeviceSettings":
+                    payload = msg.get("payload", {})
+                    dev_id = str(payload.get("deviceId", ""))
+                    for s in payload.get("settings", []):
+                        sid = s.get("id", "")
+                        val = s.get("value", "")
+                        if dev_id and sid:
+                            if dev_id not in self._settings_cache:
+                                self._settings_cache[dev_id] = {}
+                            self._settings_cache[dev_id][sid] = val
+
+                # Track call/mute state
+                elif msg_type == "InCall":
+                    payload = msg.get("payload", {})
+                    self._in_call = payload.get("inCall", False)
+                elif msg_type == "PrimaryDevice":
+                    payload = msg.get("payload", {})
+                    self._muted = payload.get("muted", False)
+                    self._primary_device = str(payload.get("deviceId", ""))
+
             self._message_event.set()
         except Exception as e:
             print(f"  ← Native (decode error): {e}")
@@ -193,6 +230,24 @@ class NativeBridge:
     def get_devices(self):
         """Return discovered devices."""
         return dict(self._devices)
+
+    def get_battery(self, device_id=None):
+        """Return battery info. If device_id is None, return all."""
+        if device_id:
+            return self._battery.get(device_id)
+        return dict(self._battery)
+
+    def get_setting_values(self, device_id):
+        """Return cached setting values {hex_id: value} for a device."""
+        return dict(self._settings_cache.get(device_id, {}))
+
+    def get_call_state(self):
+        """Return current call/mute state."""
+        return {
+            "inCall": self._in_call,
+            "muted": self._muted,
+            "primaryDevice": self._primary_device,
+        }
 
     def set_setting(self, device_id, setting_id, value, track_id=None):
         """Write a setting to a DECT device.

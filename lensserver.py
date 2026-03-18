@@ -334,7 +334,53 @@ class LensServer:
             })
             print(f"  → DeviceAttached: {dev.get('productName', '?')}")
 
+            # Push battery info if available
+            self._push_battery(client_sock, did)
+
         return None
+
+    def _push_battery(self, client_sock, device_id):
+        """Push battery info as a compound DeviceSetting."""
+        if not self._native_bridge:
+            return
+        # Match our device ID to native device ID
+        dev = self.devices.get(device_id, {})
+        ptd = dev.get("_polytool_dev", {})
+        native_id = ptd.get("_native_id", "")
+
+        # Also check all battery entries by PID match
+        batt = None
+        if native_id:
+            batt = self._native_bridge.get_battery(native_id)
+        if not batt:
+            dev_pid = int(dev.get("pid", 0))
+            for nid, ndev in self._native_bridge.get_devices().items():
+                if ndev.get("pid") == dev_pid:
+                    batt = self._native_bridge.get_battery(nid)
+                    break
+        if not batt or batt.get("level", -1) < 0:
+            return
+
+        level = batt["level"]
+        # Native bridge uses 0-5 scale, convert to percentage
+        level_pct = min(100, level * 20) if level <= 5 else level
+        charging = batt.get("charging", False)
+
+        self.send_msg(client_sock, {
+            "type": "DeviceSetting",
+            "apiVersion": API_VERSION,
+            "deviceId": device_id,
+            "setting": {
+                "name": "Singular Battery Info",
+                "value": None,
+                "value_compound": [
+                    {"name": "Level", "value": level_pct, "value_int": level_pct},
+                    {"name": "Num Levels", "value": 100, "value_int": 100},
+                    {"name": "Charging", "value": charging, "value_bool": charging},
+                ],
+            },
+        })
+        print(f"  → Battery: {level_pct}%{' (charging)' if charging else ''}")
 
     def on_get_device_list(self, msg, client_sock):
         """Handle GetDeviceList."""
@@ -769,7 +815,57 @@ class LensServer:
                     "_native_id": nid,
                 },
             }
+            # Update call/mute state from native bridge
+            call_state = bridge.get_call_state()
+            self.devices[device_id]["isMuted"] = call_state.get("muted", False)
+            self.devices[device_id]["isInCall"] = call_state.get("inCall", False)
+
             print(f"    {name} (BT via native bridge, fw {fw_display})")
+
+        # Query settings for all native bridge devices and populate cache
+        self._populate_native_settings_cache(bridge)
+
+    def _populate_native_settings_cache(self, bridge):
+        """Query native bridge for current setting values and populate cache."""
+        from native_bridge import DECT_SETTING_IDS, VOYAGER_SETTING_IDS
+
+        # Build reverse map: hex_id → setting_name (merge both maps)
+        id_to_name = {}
+        for name, hex_id in {**DECT_SETTING_IDS, **VOYAGER_SETTING_IDS}.items():
+            id_to_name[hex_id] = name
+
+        for nid in bridge.get_devices():
+            bridge.get_settings(nid)
+
+        # Wait for responses
+        time.sleep(3)
+        bridge.recv(timeout=1)
+
+        # Map native IDs to our device IDs and populate cache
+        for did, dev in self.devices.items():
+            ptd = dev.get("_polytool_dev", {})
+            native_id = ptd.get("_native_id", "")
+            if not native_id:
+                continue
+
+            native_values = bridge.get_setting_values(native_id)
+            if not native_values:
+                continue
+
+            cache = {}
+            for hex_id, val in native_values.items():
+                setting_name = id_to_name.get(hex_id)
+                if setting_name:
+                    # Convert string bools
+                    if val == "true":
+                        val = True
+                    elif val == "false":
+                        val = False
+                    cache[setting_name] = val
+
+            if cache:
+                self._device_settings_cache[did] = cache
+                print(f"  Read {len(cache)} settings from native bridge for {dev.get('productName', did)}")
 
     def read_device_settings(self, device_id):
         """Read settings for a device via our HID code."""
