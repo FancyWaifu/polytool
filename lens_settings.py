@@ -126,6 +126,8 @@ VOYAGER_BT_SETTINGS = [
     {"name": "Anti Startle 2", "type": "bool", "default": False},
     {"name": "Noise Exposure", "type": "enum", "choices": ["off", "85db", "80db"], "default": "off"},
     {"name": "Hours on Phone Per Day", "type": "enum", "choices": ["2", "4", "6", "8"], "default": "8"},
+    # ── Reset ──
+    {"name": "Restore Defaults", "type": "bool", "default": False},
 ]
 
 VOYAGER_BASE_SETTINGS = [

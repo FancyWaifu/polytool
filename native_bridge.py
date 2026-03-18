@@ -236,6 +236,7 @@ VOYAGER_SETTING_IDS = {
     "Notification Tones":          "0x805",
     "Online Indicator":            "0x902",
     "Smart Audio Transfer":        "0x90a",
+    "Restore Defaults":            "0x90a",
     # Voyager Base-M CD settings
     "Computer Volume":             "0x103",
     "Desk Phone Volume":           "0x104",

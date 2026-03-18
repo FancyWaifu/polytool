@@ -554,6 +554,9 @@ class LensServer:
         if not pid:
             return None
 
+        # Poly Cloud API wants no leading zeros (e.g. "2ea" not "02ea")
+        pid_query = pid.lstrip("0") or pid
+
         if pid in self._image_cache:
             return self._image_cache[pid]
 
@@ -566,7 +569,7 @@ class LensServer:
             }'''
             resp = requests.post(
                 "https://api.silica-prod01.io.lens.poly.com/graphql",
-                json={"query": query, "variables": {"id": pid}},
+                json={"query": query, "variables": {"id": pid_query}},
                 headers={"Content-Type": "application/json"},
                 timeout=10,
             )
