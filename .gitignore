@@ -1,6 +1,14 @@
 __pycache__/
 *.pyc
+*.pyo
 *.bak
 .DS_Store
 *.zip
 firmware_cache/
+dump.jsonl
+debug*.js
+dump_html.js
+*.log
+.env
+.venv/
+venv/
