@@ -1,32 +1,35 @@
 # PolyTool
 
-Open-source toolkit for Poly/Plantronics USB headsets. Replaces the official Poly Lens desktop app with a lightweight web dashboard, CLI tools, and a fleet management server.
+Open-source toolkit for managing Poly/Plantronics USB headsets. Drop-in replacement for the official Poly Lens desktop app — includes a web dashboard, CLI tools, a drop-in LensService replacement that serves devices directly to the Poly Studio GUI, firmware flashing, and enterprise fleet management.
 
 ## Features
 
-- **Web Dashboard** — Device management, firmware updates, and settings at `localhost:8420`
-- **Firmware Updates** — Download from Poly Cloud and flash directly over USB HID
-- **Device Settings** — Sidetone, EQ, volume, mute, and more
-- **Fleet Management** — Central server with PostgreSQL, agent-based reporting, policy enforcement
+- **LensServer** — Drop-in Poly Lens Control Service replacement. Poly Studio GUI connects to it and displays your devices with full settings controls, product images, and firmware status — no official Poly software required.
+- **Web Dashboard** — Lightweight Flask app for device management, firmware updates, and settings at `localhost:8420`
+- **Firmware Flashing** — Download from Poly Cloud CDN and flash directly over USB HID with identity preservation
+- **Device Settings** — Read and write headset settings (sidetone, EQ, noise limiting, wearing sensor, language, etc.) over HID
+- **Fleet Management** — Central PostgreSQL server with agent-based reporting, policy enforcement, and compliance monitoring
 - **Remote Configuration** — Push settings changes to headsets across your network
-- **Identity Preservation** — Firmware flashing preserves device serial numbers and Poly Lens compatibility
-- **28+ Devices Supported** — Blackwire, Savi, Sync, Voyager, EncorePro series
+- **Interactive Menu** — Terminal UI for all device operations, firmware tools, and protocol debugging
+- **Protocol Research** — HID probes and reverse-engineered protocol documentation for CX2070x, FWU API, and BladeRunner
 
 ## Quick Start
 
 **Single workstation:**
 ```bash
 pip install -r requirements.txt
-python3 polylens.py
+python3 polylens.py          # Web dashboard at localhost:8420
 ```
 
-**Fleet management:**
+**Use with Poly Studio GUI:**
 ```bash
-# Server (requires PostgreSQL)
-python3 polyserver.py --db postgresql://user:pass@localhost/polytool
+python3 lensserver.py        # Poly Studio auto-connects and shows your devices
+```
 
-# Agent (on each workstation)
-python3 polyagent.py --server http://server:8421 --key <agent_key>
+**CLI:**
+```bash
+python3 polytool.py scan     # Discover devices
+python3 menu.py              # Interactive terminal menu
 ```
 
 ## Supported Devices
@@ -36,8 +39,8 @@ python3 polyagent.py --server http://server:8421 --key <agent_key>
 | Blackwire 3220 | Yes | Sidetone | CX2070x EEPROM |
 | Blackwire 3310/3315/3320/3325 | Yes | Full | BladeRunner HID |
 | Blackwire 7225/8225 | Yes | Full | BladeRunner HID |
-| Savi 7310/7320/7410/7420 | Yes | Via base | FWU API |
-| Savi 8200/8210/8220/8410/8420 | Yes | Via base | FWU API |
+| Savi 7310/7320/7410/7420 | Yes | Full (18 settings) | FWU API / DECT |
+| Savi 8200/8210/8220/8410/8420 | Yes | Full (18 settings) | FWU API / DECT |
 | Sync 20 | Yes | — | BladeRunner HID |
 | EncorePro 310/320/515/525/545 | Yes | Full | BladeRunner HID |
 | Voyager Legend | Untested | — | USB DFU |
@@ -46,28 +49,88 @@ python3 polyagent.py --server http://server:8421 --key <agent_key>
 
 | File | Description |
 |------|-------------|
-| `polylens.py` | Web dashboard for single workstation |
+| `lensserver.py` | Drop-in Poly Lens Control Service replacement (TCP server for Poly Studio GUI) |
+| `lensapi.py` | TCP client for LensServiceApi — query devices, read/write settings, monitor events |
+| `polylens.py` | Web dashboard (Flask) for single-workstation device management |
+| `polytool.py` | CLI for scan, info, battery, updates, flash, catalog |
+| `menu.py` | Interactive terminal menu with device, firmware, and debug submenus |
 | `polyserver.py` | Fleet management server (PostgreSQL) |
 | `polyagent.py` | Workstation agent for fleet reporting |
-| `polyremote.py` | CLI for remote settings changes |
-| `polytool.py` | CLI for scan, info, battery, updates, flash |
-| `menu.py` | Interactive terminal menu |
-| `fwu_flash.py` | Savi DECT firmware flasher |
-| `bw_flash.py` | Blackwire 3220 EEPROM flasher |
+| `polyremote.py` | CLI for remote settings changes with JSON presets |
+| `fwu_flash.py` | Savi DECT firmware flasher (FWU API / CVM mailbox) |
+| `bw_flash.py` | Blackwire 3220 EEPROM flasher (CX2070x S-record) |
 | `device_identity.py` | Device identity preservation during flash |
-| `device_settings.py` | HID settings read/write per device family |
-| `probes/` | HID protocol research tools |
+| `device_settings.py` | Direct HID settings read/write per device family |
+| `lens_settings.py` | Per-device settings profiles for LensServer |
+| `clockwork_client.py` | Backwards-compatible wrapper around lensapi.py |
+| `polybus.py` | Native PolyBus library interface (ctypes) |
+| `monitor_legacyhost.py` | Poly Lens log file monitor with pattern highlighting |
+| `probes/` | HID protocol research and testing tools |
+
+## LensServer — Poly Studio Integration
+
+Replace the official Poly Lens Control Service with our open-source implementation. Poly Studio GUI auto-connects and displays your devices with full settings controls.
+
+```bash
+python3 lensserver.py              # Auto-assigns port, writes port file
+python3 lensserver.py --port 9001  # Fixed port
+python3 lensserver.py --dump       # Log all messages to dump.jsonl
+```
+
+**How it works:**
+1. Scans for connected Poly USB devices
+2. Starts a TCP server speaking the LensServiceApi protocol (SOH-delimited JSON)
+3. Writes the port number to `~/Library/Application Support/Poly/Lens Control Service/SocketPortNumber`
+4. Poly Studio GUI connects automatically
+5. Serves device info, product images (from Poly Cloud), settings metadata, and setting values
+6. Translates GUI setting changes to HID commands on the actual hardware
+
+**Supported message types:** `RegisterClient`, `ClientRegistered`, `DeviceAttached`, `DeviceDetached`, `DeviceSettings`, `DeviceSettingsMetadata`, `DeviceSetting`, `DeviceSettingUpdated`, `GetDeviceSettings`, `GetDeviceSetting`, `SetDeviceSetting`, `AvailableSoftwareUpdate`, `SystemInformation`, `LcsConfigurationInformation`
+
+## LensAPI Client
+
+Direct TCP client for the LensServiceApi protocol — works with both the real Poly Lens service and our LensServer.
+
+```bash
+python3 lensapi.py devices                        # List connected devices
+python3 lensapi.py discover                        # Full device + settings discovery
+python3 lensapi.py settings <device_id>            # Read all settings
+python3 lensapi.py get <device_id> "Sidetone"      # Read one setting
+python3 lensapi.py set <device_id> "Sidetone" "high"  # Write a setting
+python3 lensapi.py dump                            # Export everything as JSON
+python3 lensapi.py monitor                         # Watch real-time events
+```
 
 ## Web Dashboard
 
 ```bash
-python3 polylens.py
+python3 polylens.py                    # Opens browser to localhost:8420
+python3 polylens.py --port 9000        # Custom port
+python3 polylens.py --no-browser       # Don't auto-open browser
 ```
 
-- **Devices** — Connected headsets with firmware, battery, serial. Auto-refreshes.
-- **Updates** — Check Poly Cloud, download, and flash with one click.
-- **Settings** — Sidetone, EQ, noise limiting, wearing sensor, language, and more.
+- **Devices** — Connected headsets with firmware version, battery, serial number. Auto-refreshes.
+- **Updates** — Check Poly Cloud for new firmware, download, and flash with one click.
+- **Settings** — Sidetone, EQ, noise limiting, wearing sensor, language, and more per device.
 - **Catalog** — Search all Poly firmware online.
+- **Firmware Library** — Browse locally cached firmware packages.
+
+Integrates with Clockwork/LensAPI when available, falls back to direct HID.
+
+## CLI Usage
+
+```bash
+python3 polytool.py scan              # Discover devices
+python3 polytool.py info              # Detailed device info
+python3 polytool.py battery           # Battery status
+python3 polytool.py updates           # Check for firmware updates
+python3 polytool.py update            # Download and flash firmware
+python3 polytool.py update --force    # Flash even if up to date
+python3 polytool.py catalog           # Search Poly firmware catalog
+python3 polytool.py fwinfo <path>     # Analyze a firmware package
+python3 polytool.py monitor           # Live auto-refreshing dashboard
+python3 menu.py                       # Interactive terminal menu
+```
 
 ## Fleet Management
 
@@ -78,8 +141,7 @@ Central server for managing headsets across an organization.
 # Requires PostgreSQL
 python3 polyserver.py --db postgresql://user:pass@localhost/polytool
 ```
-
-The server prints API keys on startup. Use the agent key to connect workstations.
+API keys are auto-generated on first run and printed to the console.
 
 **Agent** (`polyagent.py`):
 ```bash
@@ -98,24 +160,20 @@ python3 polyagent.py --server http://server:8421 --key <agent_key> --once
 - **Commands** — Push settings changes to all agents
 - **Audit Log** — Full activity history
 
-**Security:**
-- API key authentication for agents and admin dashboard
-- Rate limiting (120 req/min per IP)
-- Input validation on all endpoints
-- Keys auto-generated on first run, stored with restricted permissions
+**Security:** API key auth (HMAC constant-time comparison), rate limiting (120 req/min per IP), input validation on all endpoints, keys stored with restricted file permissions.
 
 ## PolyRemote
 
 Standalone CLI for headset settings. Coexists with Poly Lens — does not modify firmware or the managed client.
 
 ```bash
-python3 polyremote.py list                              # List devices
-python3 polyremote.py set "Sidetone Level" 5            # Change a setting
+python3 polyremote.py list                                # List devices
+python3 polyremote.py set "Sidetone Level" 5              # Change a setting
 python3 polyremote.py set "Ringtone Volume" 8 --pid 0xACFF  # Target specific device
-python3 polyremote.py get "Sidetone Level"              # Read a setting
-python3 polyremote.py dump                              # Dump all settings
-python3 polyremote.py batch presets/office_standard.json # Apply preset
-python3 polyremote.py settings                          # List available settings
+python3 polyremote.py get "Sidetone Level"                # Read a setting
+python3 polyremote.py dump                                # Dump all settings
+python3 polyremote.py batch presets/office_standard.json   # Apply preset
+python3 polyremote.py settings                            # List available settings
 ```
 
 JSON output for automation (auto-enabled when piped):
@@ -125,40 +183,91 @@ python3 polyremote.py dump --json > device_report.json
 ```
 
 Included presets in `presets/`:
-- `office_standard.json` — Standard office config
-- `call_center.json` — High-volume call center
+- `office_standard.json` — Standard office config (sidetone 3, ringtone 7, HD Voice on)
+- `call_center.json` — High-volume call center (auto-answer on, ringtone 10, noise limiting on)
 - `quiet_mode.json` — Minimal audio feedback
-
-## CLI Usage
-
-```bash
-python3 polytool.py scan       # Discover devices
-python3 polytool.py info       # Detailed device info
-python3 polytool.py battery    # Battery status
-python3 polytool.py updates    # Check for firmware updates
-python3 polytool.py update     # Download and flash firmware
-python3 polytool.py catalog    # Search Poly firmware catalog
-python3 menu.py                # Interactive terminal menu
-```
 
 ## Firmware Flashing
 
 Three protocols, all reverse-engineered from Poly Lens:
 
-**CX2070x EEPROM** (Blackwire 3220) — S-record patches to Conexant EEPROM via HID. Automatically preserves serial number and calibration data.
+**CX2070x EEPROM** (Blackwire 3220) — S-record patches to Conexant EEPROM via HID. Automatically preserves serial number and calibration data at EEPROM offsets 0x0020–0x0083.
 
-**FWU API** (Savi series) — CVM mailbox protocol with LE 16-bit primitive IDs. Tested: 4,915 blocks, 991 KB, 89 seconds.
+**FWU API** (Savi series) — CVM mailbox protocol with LE 16-bit primitive IDs. Tested: 4,915 blocks, 991 KB, 89 seconds. Requires USB reset on macOS before input report reads.
 
-**BladeRunner FTP** (Blackwire 33xx, Sync, EncorePro) — File transfer over HID with handshake, block writes, and CRC32 verification.
+**BladeRunner FTP** (Blackwire 33xx, 7225, 8225, Sync, EncorePro) — File transfer over HID with handshake, block writes, and CRC32 verification.
+
+## Log Monitor
+
+Watch Poly Lens log files in real time with color-coded pattern highlighting:
+
+```bash
+python3 monitor_legacyhost.py          # Monitor legacyhost logs
+python3 monitor_legacyhost.py --all    # Monitor all log sources (legacyhost, Clockwork, LCS)
+python3 monitor_legacyhost.py --raw    # Show all lines, not just interesting patterns
+```
+
+Highlights HID reports (green), DFU events (yellow), errors (red), and IPC commands (cyan).
+
+## Protocol Probes
+
+Research tools for reverse engineering Poly USB HID protocols:
+
+```bash
+python3 probes/fwu_probe.py --test passive       # Safe read-only scan
+python3 probes/fwu_probe.py --test signon         # RID 13 sign-on protocol
+python3 probes/fwu_probe.py --test bladerunner    # BladeRunner protocol probe
+python3 probes/fwu_probe.py --test enumerate      # Enumerate all HID interfaces
+python3 probes/fwu_probe.py --test scan           # Scan FWU command codes
+python3 probes/fwu_probe.py --test all            # Progressive test suite
+```
+
+## Project Structure
+
+```
+polytool/
+├── polytool.py              # Main CLI
+├── menu.py                  # Interactive terminal menu
+├── polylens.py              # Web dashboard (Flask)
+├── lensserver.py            # Drop-in LensService replacement
+├── lensapi.py               # LensServiceApi TCP client
+├── lens_settings.py         # Per-device settings profiles
+├── device_settings.py       # Direct HID settings read/write
+├── device_identity.py       # Identity preservation during flash
+├── fwu_flash.py             # Savi DECT flasher
+├── bw_flash.py              # Blackwire 3220 flasher
+├── polyserver.py            # Fleet management server
+├── polyagent.py             # Fleet workstation agent
+├── polyremote.py            # Remote settings CLI
+├── clockwork_client.py      # Legacy compatibility wrapper
+├── polybus.py               # Native PolyBus library interface
+├── monitor_legacyhost.py    # Log file monitor
+├── RE_FINDINGS.txt          # Reverse engineering documentation
+├── data/
+│   ├── Devices.config       # Device PID → handler mappings
+│   ├── DeviceSetting.json   # Settings value database (from LensService)
+│   └── settingsCategories.json  # Poly Studio UI settings layout
+├── web/
+│   ├── index.html           # Dashboard SPA entry point
+│   ├── app.js               # Frontend JavaScript
+│   └── style.css            # Dashboard styling
+├── presets/
+│   ├── office_standard.json
+│   ├── call_center.json
+│   └── quiet_mode.json
+└── probes/
+    ├── fwu_probe.py         # Unified HID protocol probe
+    └── hid_helpers.py       # Shared HID utilities
+```
 
 ## Requirements
 
 - Python 3.9+
 - `hidapi` — HID device communication
 - `requests` — Poly Cloud API
-- `flask` — Web dashboard and server
-- `pyusb` — USB reset for Savi flash (macOS)
-- `psycopg2-binary` — PostgreSQL (fleet server)
+- `flask` — Web dashboard and fleet server
+- `pyusb` — USB reset for macOS (Savi flash)
+- `psycopg2-binary` — PostgreSQL (fleet server only)
 - `rich` — Terminal formatting (optional)
 
 ```bash
@@ -167,9 +276,11 @@ pip install -r requirements.txt
 
 ## How It Works
 
-PolyTool talks directly to headsets over USB HID using the same protocols Poly Lens uses internally. Firmware is downloaded from Poly's public CDN and flashed using reverse-engineered protocols from `libDFUManager.dylib`.
+PolyTool talks directly to headsets over USB HID using the same protocols Poly Lens uses internally. Firmware is downloaded from Poly's public CDN and flashed using reverse-engineered protocols from the Poly Lens .NET assemblies and native libraries.
 
-See `RE_FINDINGS.txt` for the complete reverse engineering documentation — register maps, CVM commands, EEPROM layouts, and protocol details for every tested device.
+The LensServer component speaks the same TCP protocol as the official Poly Lens Control Service (reverse-engineered from the Poly Studio Electron app's `app.asar`). This means Poly Studio GUI connects to our server and works exactly as if the official service were running — but backed entirely by our open-source HID code.
+
+See `RE_FINDINGS.txt` for the complete reverse engineering documentation — register maps, CVM commands, EEPROM layouts, LensServiceApi protocol details, and protocol specifics for every tested device.
 
 ## License
 
