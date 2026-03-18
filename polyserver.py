@@ -320,10 +320,36 @@ def init_db():
             detail TEXT
         )
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS settings_history (
+            id SERIAL PRIMARY KEY,
+            agent_id TEXT,
+            device_serial TEXT,
+            device_pid TEXT,
+            setting_name TEXT,
+            old_value TEXT,
+            new_value TEXT,
+            changed_by TEXT DEFAULT 'agent',
+            timestamp TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS alerts (
+            id SERIAL PRIMARY KEY,
+            alert_type TEXT NOT NULL,
+            device_serial TEXT,
+            agent_id TEXT,
+            message TEXT,
+            severity TEXT DEFAULT 'info',
+            acknowledged INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_devices_agent ON devices(agent_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_devices_pid ON devices(pid)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_commands_agent ON commands(agent_id, status)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_settings_hist_device ON settings_history(device_serial, setting_name)")
 
     conn.commit()
     conn.close()
@@ -365,6 +391,35 @@ def agent_report():
         if not serial and not pid:
             continue
 
+        new_settings = dev.get("settings", {})
+        new_settings_json = json.dumps(new_settings)
+
+        # Fetch existing settings to detect changes
+        existing = db_fetchone(conn, """
+            SELECT settings_json FROM devices
+            WHERE agent_id = ? AND serial = ? AND pid = ?
+        """, (agent_id, serial, pid))
+
+        if existing:
+            try:
+                old_settings = json.loads(existing.get("settings_json", "{}") or "{}")
+            except (json.JSONDecodeError, TypeError):
+                old_settings = {}
+            # Track changed settings
+            all_keys = set(list(old_settings.keys()) + list(new_settings.keys()))
+            for sname in all_keys:
+                old_val = old_settings.get(sname)
+                new_val = new_settings.get(sname)
+                if old_val != new_val:
+                    db_execute(conn, """
+                        INSERT INTO settings_history
+                            (agent_id, device_serial, device_pid, setting_name, old_value, new_value, changed_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (agent_id, serial, pid, sname,
+                          str(old_val) if old_val is not None else None,
+                          str(new_val) if new_val is not None else None,
+                          "agent"))
+
         db_execute(conn, """
             INSERT INTO devices (agent_id, pid, pid_hex, serial, product_name,
                 friendly_name, firmware, category, dfu_executor, family,
@@ -381,7 +436,48 @@ def agent_report():
               dev.get("firmware", ""), dev.get("category", ""),
               dev.get("dfu_executor", ""), dev.get("family", ""),
               dev.get("battery_level", -1), now,
-              json.dumps(dev.get("settings", {}))))
+              new_settings_json))
+
+    # Check for alert conditions
+    for dev in devices:
+        serial = dev.get("serial", "")
+        pid = dev.get("pid", "")
+        battery = dev.get("battery_level", -1)
+
+        if battery >= 0 and battery < 5:
+            db_execute(conn, """
+                INSERT INTO alerts (alert_type, device_serial, agent_id, message, severity)
+                VALUES (?, ?, ?, ?, ?)
+            """, ("low_battery", serial, agent_id,
+                  f"Critical battery level: {battery}% on {dev.get('friendly_name', dev.get('product_name', pid))}",
+                  "critical"))
+        elif battery >= 0 and battery < 20:
+            db_execute(conn, """
+                INSERT INTO alerts (alert_type, device_serial, agent_id, message, severity)
+                VALUES (?, ?, ?, ?, ?)
+            """, ("low_battery", serial, agent_id,
+                  f"Low battery: {battery}% on {dev.get('friendly_name', dev.get('product_name', pid))}",
+                  "warning"))
+
+        # Check firmware against policies
+        fw = dev.get("firmware", "")
+        if fw:
+            fw_policies = db_fetchall(conn, """
+                SELECT * FROM policies WHERE policy_type = 'firmware_version' AND enabled = 1
+            """)
+            for pol in fw_policies:
+                p = dict(pol)
+                if p["target_pid"] != "*" and p["target_pid"] != pid:
+                    continue
+                if p["target_category"] != "*" and p["target_category"] != dev.get("category", ""):
+                    continue
+                if fw != p["policy_value"]:
+                    db_execute(conn, """
+                        INSERT INTO alerts (alert_type, device_serial, agent_id, message, severity)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, ("firmware_mismatch", serial, agent_id,
+                          f"Firmware {fw} does not match policy '{p['name']}' (expected {p['policy_value']})",
+                          "warning"))
 
     # Log
     db_execute(conn, "INSERT INTO audit_log (agent_id, action, detail) VALUES (?, ?, ?)",
@@ -651,7 +747,7 @@ def fleet_stats():
     total_agents = db_fetchone(conn, "SELECT COUNT(*) FROM agents")[0]
     online_agents = db_fetchone(conn, """
         SELECT COUNT(*) as cnt FROM agents
-        WHERE datetime(last_seen) > datetime('now', '-5 minutes')
+        WHERE last_seen > NOW() - INTERVAL '5 minutes'
     """)["cnt"]
 
     by_category = db_fetchall(conn, """
@@ -691,6 +787,251 @@ def audit_log():
     return jsonify({"log": [dict(r) for r in rows]})
 
 
+# ── Fleet Detail / Health / Enforce / Alerts API ─────────────────────────
+
+@app.route("/api/fleet/device/<int:device_id>")
+@require_admin_key
+def fleet_device_detail(device_id):
+    """Return detailed info for a single device."""
+    conn = get_db()
+    dev = db_fetchone(conn, """
+        SELECT d.*, a.hostname, a.username, a.platform, a.last_seen as agent_last_seen
+        FROM devices d
+        LEFT JOIN agents a ON d.agent_id = a.agent_id
+        WHERE d.id = ?
+    """, (device_id,))
+    if not dev:
+        conn.close()
+        return jsonify({"error": "Device not found"}), 404
+
+    d = dict(dev)
+    d["settings"] = json.loads(d.get("settings_json", "{}"))
+    d.pop("settings_json", None)
+    try:
+        last = datetime.fromisoformat(d.get("agent_last_seen", ""))
+        d["online"] = (datetime.utcnow() - last).total_seconds() < 300
+    except Exception:
+        d["online"] = False
+
+    # Compliance
+    policies = db_fetchall(conn, "SELECT * FROM policies WHERE enabled = 1")
+    d["violations"] = []
+    d["compliant"] = True
+    for pol in policies:
+        p = dict(pol)
+        if p["target_pid"] != "*" and p["target_pid"] != d["pid"]:
+            continue
+        if p["target_category"] != "*" and p["target_category"] != d.get("category", ""):
+            continue
+        if p["policy_type"] == "firmware_version":
+            if d.get("firmware", "") != p["policy_value"]:
+                d["violations"].append({"policy": p["name"], "type": "firmware_version",
+                                         "expected": p["policy_value"], "actual": d.get("firmware", "unknown")})
+                d["compliant"] = False
+        elif p["policy_type"] == "setting":
+            try:
+                rule = json.loads(p["policy_value"])
+                actual = d["settings"].get(rule.get("name", ""))
+                if actual is not None and actual != rule.get("value"):
+                    d["violations"].append({"policy": p["name"], "type": "setting",
+                                             "setting": rule["name"], "expected": rule["value"], "actual": actual})
+                    d["compliant"] = False
+            except Exception:
+                pass
+
+    # Command history
+    cmds = db_fetchall(conn, """
+        SELECT * FROM commands
+        WHERE (device_pid = ? OR device_pid = '*')
+          AND (agent_id = ? OR agent_id = '*')
+        ORDER BY created_at DESC LIMIT 20
+    """, (d.get("pid", ""), d.get("agent_id", "")))
+    d["command_history"] = [dict(c) for c in cmds]
+
+    conn.close()
+    return jsonify(d)
+
+
+@app.route("/api/fleet/settings-summary")
+@require_admin_key
+def fleet_settings_summary():
+    """Return summary of all unique settings across the fleet with value distributions."""
+    conn = get_db()
+    devices = db_fetchall(conn, "SELECT settings_json FROM devices")
+    conn.close()
+
+    distributions = {}  # {setting_name: {value: count}}
+    for dev in devices:
+        try:
+            settings = json.loads(dev.get("settings_json", "{}") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for name, value in settings.items():
+            if name not in distributions:
+                distributions[name] = {}
+            val_str = str(value)
+            distributions[name][val_str] = distributions[name].get(val_str, 0) + 1
+
+    summary = []
+    for name in sorted(distributions.keys()):
+        summary.append({"setting": name, "values": distributions[name],
+                        "total_devices": sum(distributions[name].values())})
+
+    return jsonify({"settings": summary, "unique_settings": len(summary)})
+
+
+@app.route("/api/fleet/enforce", methods=["POST"])
+@require_admin_key
+def fleet_enforce():
+    """Find non-compliant devices and push set_setting commands to fix them."""
+    data = request.get_json() or {}
+    policy_id = data.get("policy_id")
+    if not policy_id:
+        return jsonify({"error": "policy_id required"}), 400
+
+    conn = get_db()
+    policy = db_fetchone(conn, "SELECT * FROM policies WHERE id = ? AND enabled = 1", (policy_id,))
+    if not policy:
+        conn.close()
+        return jsonify({"error": "Policy not found or disabled"}), 404
+
+    p = dict(policy)
+    devices = db_fetchall(conn, "SELECT * FROM devices")
+    pushed = 0
+
+    for dev in devices:
+        d = dict(dev)
+        if p["target_pid"] != "*" and p["target_pid"] != d["pid"]:
+            continue
+        if p["target_category"] != "*" and p["target_category"] != d.get("category", ""):
+            continue
+
+        if p["policy_type"] == "setting":
+            try:
+                rule = json.loads(p["policy_value"])
+                settings = json.loads(d.get("settings_json", "{}") or "{}")
+                sname = rule.get("name", "")
+                expected = rule.get("value")
+                actual = settings.get(sname)
+                if actual is not None and actual != expected:
+                    db_execute(conn, """
+                        INSERT INTO commands (agent_id, device_serial, device_pid, command_type, command_data)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (d["agent_id"], d.get("serial", "*"), d["pid"],
+                          "set_setting", json.dumps({"name": sname, "value": expected})))
+                    pushed += 1
+            except Exception:
+                pass
+        elif p["policy_type"] == "firmware_version":
+            if d.get("firmware", "") != p["policy_value"]:
+                # Firmware enforcement is informational only — cannot auto-push DFU
+                pass
+
+    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (?, ?)",
+               ("enforce_policy", json.dumps({"policy_id": policy_id, "commands_pushed": pushed})))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"status": "ok", "commands_pushed": pushed, "policy": p["name"]})
+
+
+@app.route("/api/fleet/health")
+@require_admin_key
+def fleet_health():
+    """Return fleet health metrics."""
+    conn = get_db()
+
+    low_battery = db_fetchall(conn, """
+        SELECT d.*, a.hostname FROM devices d
+        LEFT JOIN agents a ON d.agent_id = a.agent_id
+        WHERE d.battery_level >= 0 AND d.battery_level < 20
+    """)
+
+    offline_24h = db_fetchall(conn, """
+        SELECT d.*, a.hostname, a.last_seen as agent_last_seen FROM devices d
+        LEFT JOIN agents a ON d.agent_id = a.agent_id
+        WHERE a.last_seen < NOW() - INTERVAL '24 hours'
+    """)
+
+    # Devices with firmware not matching any active policy
+    devices = db_fetchall(conn, "SELECT * FROM devices")
+    policies = db_fetchall(conn, "SELECT * FROM policies WHERE enabled = 1 AND policy_type = 'firmware_version'")
+    outdated = []
+    for dev in devices:
+        d = dict(dev)
+        for pol in policies:
+            p = dict(pol)
+            if p["target_pid"] != "*" and p["target_pid"] != d["pid"]:
+                continue
+            if p["target_category"] != "*" and p["target_category"] != d.get("category", ""):
+                continue
+            if d.get("firmware", "") != p["policy_value"]:
+                outdated.append(d)
+                break
+
+    # Compliance violations count
+    violation_count = 0
+    setting_policies = db_fetchall(conn, "SELECT * FROM policies WHERE enabled = 1 AND policy_type = 'setting'")
+    for dev in devices:
+        d = dict(dev)
+        for pol in setting_policies:
+            p = dict(pol)
+            if p["target_pid"] != "*" and p["target_pid"] != d["pid"]:
+                continue
+            if p["target_category"] != "*" and p["target_category"] != d.get("category", ""):
+                continue
+            try:
+                rule = json.loads(p["policy_value"])
+                settings = json.loads(d.get("settings_json", "{}") or "{}")
+                if settings.get(rule.get("name", "")) is not None and settings.get(rule["name"]) != rule.get("value"):
+                    violation_count += 1
+            except Exception:
+                pass
+
+    conn.close()
+
+    return jsonify({
+        "low_battery": [dict(d) for d in low_battery],
+        "low_battery_count": len(low_battery),
+        "offline_24h": [dict(d) for d in offline_24h],
+        "offline_24h_count": len(offline_24h),
+        "outdated_firmware": [dict(d) for d in outdated],
+        "outdated_firmware_count": len(outdated),
+        "compliance_violations": violation_count,
+    })
+
+
+@app.route("/api/alerts")
+@require_admin_key
+def get_alerts():
+    """Return unacknowledged alerts with optional severity filter."""
+    severity = request.args.get("severity", "")
+    conn = get_db()
+    if severity:
+        rows = db_fetchall(conn, """
+            SELECT * FROM alerts WHERE acknowledged = 0 AND severity = ?
+            ORDER BY created_at DESC
+        """, (severity,))
+    else:
+        rows = db_fetchall(conn, """
+            SELECT * FROM alerts WHERE acknowledged = 0
+            ORDER BY created_at DESC
+        """)
+    conn.close()
+    return jsonify({"alerts": [dict(r) for r in rows], "count": len(rows)})
+
+
+@app.route("/api/alerts/<int:alert_id>/acknowledge", methods=["POST"])
+@require_admin_key
+def acknowledge_alert(alert_id):
+    """Mark an alert as acknowledged."""
+    conn = get_db()
+    db_execute(conn, "UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"})
+
+
 # ── Admin Dashboard ───────────────────────────────────────────────────────
 
 @app.route("/")
@@ -727,13 +1068,13 @@ def main():
     init_db()
 
     if args.init:
-        print(f"Database initialized at {DB_PATH}")
+        print(f"Database initialized at {db_display}")
         return
 
     print(f"\n  PolyServer — Headset Management")
     print(f"  Dashboard:  http://localhost:{args.port}")
     print(f"  Agent API:  http://0.0.0.0:{args.port}/api/agent/")
-    print(f"  Database:   {DB_PATH}")
+    print(f"  Database:   {db_display}")
     print(f"")
     print(f"  Admin Key:  {SERVER_CONFIG['admin_key']}")
     print(f"  Agent Key:  {SERVER_CONFIG['agent_key']}")

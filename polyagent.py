@@ -143,6 +143,71 @@ def discover_devices():
             "battery_level": -1,
         }
 
+    # Try native bridge for BT/DECT devices
+    try:
+        from native_bridge import NativeBridge, find_components_dir
+        if find_components_dir():
+            bridge = NativeBridge()
+            bridge.start()
+            import time as _time
+            # Wait for devices
+            for _ in range(20):
+                _time.sleep(0.5)
+                bridge.recv(timeout=0.1)
+                if bridge.get_devices():
+                    break
+            # Wait a bit more for BT devices
+            _time.sleep(3)
+            bridge.recv(timeout=0.5)
+
+            for nid, ndev in bridge.get_devices().items():
+                pid = ndev.get("pid", 0)
+                # Skip if already found via USB
+                if any(int(d["pid"], 16) == pid for d in seen.values()):
+                    continue
+                name = ndev.get("name", "")
+                fw = ndev.get("firmwareVersion", {})
+                fw_str = fw.get("bluetooth", "") or fw.get("usb", "") or fw.get("headset", "")
+                # Get battery
+                batt = bridge.get_battery(nid)
+                batt_level = -1
+                if batt and batt.get("level", -1) >= 0:
+                    level = batt["level"]
+                    batt_level = min(100, level * 20) if level <= 5 else level
+
+                # Get settings
+                bridge.get_settings(nid)
+                _time.sleep(2)
+                bridge.recv(timeout=0.5)
+                native_vals = bridge.get_setting_values(nid)
+
+                from native_bridge import setting_id_to_name
+                settings = {}
+                for hex_id, val in native_vals.items():
+                    sname = setting_id_to_name(hex_id)
+                    if sname:
+                        settings[sname] = val
+
+                key = (pid, nid)
+                seen[key] = {
+                    "pid": f"{pid:04x}",
+                    "pid_hex": f"0x{pid:04X}",
+                    "serial": "",
+                    "product_name": name,
+                    "friendly_name": name,
+                    "firmware": fw_str,
+                    "category": "headset",
+                    "dfu_executor": "btNeoDfu",
+                    "family": "voyager_bt",
+                    "usage_page": 0,
+                    "battery_level": batt_level,
+                    "settings": settings,
+                }
+
+            bridge.stop()
+    except Exception as e:
+        log.debug(f"Native bridge discovery: {e}")
+
     return list(seen.values())
 
 
@@ -175,6 +240,8 @@ def execute_command(cmd):
 
     if cmd_type == "set_setting":
         return execute_set_setting(cmd, cmd_data)
+    elif cmd_type == "native_set_setting":
+        return execute_native_set_setting(cmd, cmd_data)
     elif cmd_type == "apply_preset":
         return execute_apply_preset(cmd, cmd_data)
     elif cmd_type == "report":
@@ -226,6 +293,61 @@ def execute_apply_preset(cmd, data):
         results.append(r)
     ok = sum(1 for r in results if r["status"] == "done")
     return {"status": "done", "result": f"{ok}/{len(settings)} settings applied"}
+
+
+def execute_native_set_setting(cmd, data):
+    """Execute a setting write via native bridge (for DECT/Voyager)."""
+    name = data.get("name", "")
+    value = data.get("value")
+    if not name:
+        return {"status": "error", "result": "Setting name required"}
+    try:
+        from native_bridge import NativeBridge, find_components_dir, setting_name_to_id
+        if not find_components_dir():
+            return {"status": "error", "result": "Native bridge not available"}
+
+        setting_id = setting_name_to_id(name)
+        if not setting_id:
+            return {"status": "error", "result": f"Unknown setting: {name}"}
+
+        bridge = NativeBridge()
+        bridge.start()
+        import time as _time
+        for _ in range(20):
+            _time.sleep(0.5)
+            bridge.recv(timeout=0.1)
+            if bridge.get_devices():
+                break
+        _time.sleep(3)
+        bridge.recv(timeout=0.5)
+
+        devs = bridge.get_devices()
+        if not devs:
+            bridge.stop()
+            return {"status": "error", "result": "No native devices found"}
+
+        # Use first device (or match by PID if specified)
+        target_pid = cmd.get("device_pid", "*")
+        native_id = None
+        for nid, ndev in devs.items():
+            if target_pid == "*" or f"{ndev.get('pid',0):04x}" == target_pid.lower().replace("0x", ""):
+                native_id = nid
+                break
+
+        if not native_id:
+            native_id = list(devs.keys())[0]
+
+        result = bridge.set_setting(native_id, setting_id, str(value))
+        _time.sleep(1)
+        bridge.recv(timeout=1)
+        bridge.stop()
+
+        if result:
+            log.info(f"Native set {name}={value} on {native_id}")
+            return {"status": "done", "result": f"Set {name}={value} via native bridge"}
+        return {"status": "error", "result": "Native bridge write failed"}
+    except Exception as e:
+        return {"status": "error", "result": str(e)}
 
 
 # ── Agent Loop ────────────────────────────────────────────────────────────
