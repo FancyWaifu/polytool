@@ -228,6 +228,9 @@ DFU_EXECUTOR_MAP = {
     # Savi USB dongles (headset-side, FWU protocol)
     "ab06": "LegacyDfu", "ab07": "LegacyDfu",  # Savi 7310/7320 dongles
     "ab09": "LegacyDfu", "ab0a": "LegacyDfu",  # Savi 8210/8220 dongles
+    # Voyager Base/Dock (BT adapter, firmware via cloud)
+    "2ea": "btNeoDfu", "2eb": "btNeoDfu",  # Voyager Base D / Base-M CD
+    "2ec": "btNeoDfu", "2e4": "btNeoDfu",  # Voyager Base CD / Base-M CD
     # Voyager Focus UC (CSR-dfu2 via btNeoDfu)
     "127": "btNeoDfu",
     # Voyager Legend (USB DFU class protocol)
