@@ -1,0 +1,292 @@
+{
+  "Volume Min/Max Alerts": {
+    "tone": "Tone",
+    "voice": "Voice"
+  },
+  "Second Incoming Call": {
+    "ignore": "Ignore",
+    "once": "Ring Once",
+    "continuous": "Ring Continuous"
+  },
+  "Active Call Audio": {
+    "doNothing": "Do Nothing",
+    "transferAudioToMobile": "Transfer Audio to Mobile Phone",
+    "muteMic": "Mute Microphone"
+  },
+  "Noise Exposure": {
+    "85db": "Limit at 85 dBA",
+    "80db": "Limit at 80 dBA",
+    "off": "No Limiting"
+  },
+  "Hours on Phone Per Day": {
+    "2": "2 hrs.",
+    "4": "4 hrs.",
+    "6": "6 hrs.",
+    "8": "8 hrs.",
+    "off": "Off"
+  },
+  "Mute Alert Voice Type": {
+    "false": "Tone",
+    "true": "Voice"
+  },
+  "Mute Reminder Time": {
+    "1": "1 minute",
+    "2": "2 minutes",
+    "3": "3 minutes",
+    "4": "4 minutes",
+    "5": "5 minutes",
+    "6": "6 minutes",
+    "7": "7 minutes",
+    "8": "8 minutes",
+    "9": "9 minutes",
+    "10": "10 minutes",
+    "11": "11 minutes",
+    "12": "12 minutes",
+    "13": "13 minutes",
+    "14": "14 minutes",
+    "15": "15 minutes",
+    "off": "Off"
+  },
+  "Mute Reminder Volume": {
+    "off": "Off",
+    "low": "Low volume",
+    "standard": "Standard volume"
+  },
+  "Mute On/Off Alerts": {
+    "voice": "Voice",
+    "singleTone": "Single Tone",
+    "doubleTone": "Double Tone"
+  },
+  "System tone": {
+    "off": "Off",
+    "low": "Low volume",
+    "standard": "Standard volume"
+  },
+  "Volume Level Tones": {
+    "atEveryLevel": "At Every Level",
+    "minMaxOnly": "Minimum & Maximum Only"
+  },
+  "Microphone Wearing Location": {
+    "right": "Right",
+    "left": "Left"
+  },
+  "Mute Reminder": {
+    "off": "Off",
+    "timed": "Time-Based",
+    "voiceAudible": "Audible Reminder",
+    "voiceVisible": "On-Screen Reminder",
+    "voiceVisibleAndAudible": "On-Screen & Audible Reminders"
+  },
+  "Default Line Type": {
+    "pstn": "Desk phone",
+    "voip": "Computer",
+    "mobile": "Mobile"
+  },
+  "Desk Phone Volume": {
+    "off": "Off",
+    "low": "Low",
+    "standard": "Standard"
+  },
+  "Computer Volume": {
+    "off": "Off",
+    "low": "Low",
+    "standard": "Standard"
+  },
+  "VoIP Interface Ringtone": {
+    "sound1": "Sound 1",
+    "sound2": "Sound 2",
+    "sound3": "Sound 3",
+    "off": "Off"
+  },
+  "Desk Phone": {
+    "sound1": "Sound 1",
+    "sound2": "Sound 2",
+    "sound3": "Sound 3",
+    "off": "Off"
+  },
+  "DECT Density": {
+    "homeMode": "Music",
+    "enterpriseMode": "Hybrid",
+    "mono": "Conversation",
+    "narrowBand": "Narrowband"
+  },
+  "HD Voice": {
+    "narrowband": "false",
+    "wideband": "true",
+    "stereo": "Stereo",
+    "widebandStereo": "Wideband Stereo"
+  },
+  "Multiband Expander": {
+    "no": "No",
+    "moderate": "Moderate",
+    "agressive": "Aggressive",
+    "aimoderate": "AI Moderate"
+  },
+  "Sidetone": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High"
+  },
+  "ANC Timeout": {
+    "2": "2 hours",
+    "4": "4 hours",
+    "off": "Off"
+  },
+  "ANC Mode": {
+    "adaptive": "Adaptive",
+    "automatic": "Automatic",
+    "standard": "Standard",
+    "off": "Off"
+  },
+  "Transparency Mode": {
+    "speech": "Speech",
+    "environment": "Environment",
+    "off": "Off"
+  },
+  "ANC Transparency State": {
+    "ancModeActive": "Anc Mode Active",
+    "transparencyModeActive": "Transparency Mode Active"
+  },
+  "Wearing preference for volume control": {
+    "unknown": "No change",
+    "left": "Left ear",
+    "right": "Right ear",
+    "leftRight": "Boom on Right Side",
+    "leftRightSwapped": "Boom on Left Side"
+  },
+  "Anti Startle 2": {
+    "off": "Off",
+    "standard": "Standard",
+    "enhanced": "Enhanced"
+  },
+  "Connection": {
+    "voice": "Voice",
+    "tone": "Tone"
+  },
+  "Custom Button": {
+    "playPause": "Play/Pause",
+    "redial": "Redial (mobile only)",
+    "vpa": "Voice Assistant",
+    "clearTrustedDevice": "Clear Trusted Device List",
+    "statusCheck": "Status Check",
+    "holdResume": "Hold/Resume Call",
+    "anc": "ANC/Transparency Mode",
+    "ancMode": "ANC Mode",
+    "nothing": "Do Nothing",
+    "microsoftTeams": "Microsoft Teams",
+    "pauseResume": "Pause/Resume"
+  },
+  "Acoustic Fence": {
+    "60": "NARROW",
+    "90": "MEDIUM",
+    "120": "WIDE",
+    "off": "OFF",
+    "cameraView": "CAMERA_VIEW"
+  },
+  "Rocket Button": {
+    "holdResume": "Hold/Resume Call",
+    "playPause": "Play/Pause",
+    "statusLight": "Status lights",
+    "lens": "Open Poly Lens Desktop",
+    "vpa": "Voice Assistant",
+    "redial": "Redial Last Call",
+    "vanity": "Vanity Lights",
+    "answerEnd": "Answer/End Call",
+    "videoMute": "Video Mute Camera"
+  },
+  "Custom Swipe Sensor Idle": {
+    "volume": "Volume",
+    "anc": "ANC/Transparency Mode",
+    "status": "Status Check",
+    "nothing": "Do Nothing"
+  },
+  "Custom Swipe Sensor In Call": {
+    "volume": "Volume",
+    "ancMode": "ANC On/Off",
+    "hold": "Hold/Resume Call",
+    "mute": "Mute",
+    "nothing": "Do Nothing"
+  },
+  "Custom Swipe Sensor Streaming Media": {
+    "volume": "Volume",
+    "anc": "ANC/Transparency Mode",
+    "track": "Track Forward/Track Backward",
+    "nothing": "Do Nothing"
+  },
+  "Anti-flicker (50Hz / 60Hz) solution": {
+    "0": "Disabled",
+    "1": "50Hz",
+    "2": "60Hz",
+    "3": "Auto"
+  },
+  "Camera Tracking Mode": {
+    "speaker": "Speaker Framing",
+    "off": "Off",
+    "group": "Group Framing",
+    "presenter": "Presenter",
+    "conversation": "Conversation",
+    "gallery": "Gallery"
+  },
+  "Tracking Speed": {
+    "slow": "Slow",
+    "normal": "Normal",
+    "fast": "Fast"
+  },
+  "Maximum Zoom": {
+    "2x": "2x",
+    "3x": "3x",
+    "4x": "4x",
+    "5x": "5x"
+  },
+  "Camera Movement": {
+    "auto pan": "Auto Pan",
+    "cut": "Cut"
+  },
+  "Audio Noise Block AI": {
+    "noiseblockai": "NoiseBlockAI",
+    "noiseandreverbblockai": "NoiseAndReverbBlockAI",
+    "off": "OFF"
+  },
+  "Audio Advanced Noise Block AI": {
+    "noiseblockai": "NoiseBlockAI",
+    "noiseandreverbblockai": "NoiseAndReverbBlockAI",
+    "off": "OFF"
+  },
+  "Noise Block AI - Outgoing": {
+    "true": "1",
+    "false": "0"
+  },
+  "Noise Block AI - Incoming": {
+    "true": "1",
+    "false": "0"
+  },
+  "Keep Link Up": {
+    "activeonlyduringcall": "Active Only During Call",
+    "alwaysactive": "Always Active"
+  },
+  "Quick Disconnect": {
+    "doNothing": "Do nothing",
+    "placeCallOnHold": "Place Active Call on Hold",
+    "lockComputerScreen": "Lock Computer Screen",
+    "lockScreenAndPlaceCallOnHold": "Lock Computer Screen & Place Active Call on Hold"
+  },
+  "Auto Connect To Mobile Phone 2": {
+    "always": "Always",
+    "never": "Never",
+    "whenUndocked": "Only when Headset is Undocked"
+  },
+  "Power Level": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High"
+  },
+  "Audio Bandwidth PSTN": {
+    "narrowband": "Narrowband",
+    "wideband": "Wideband"
+  },
+  "Audio Bandwidth VoIP": {
+    "narrowband": "Narrowband",
+    "wideband": "Wideband"
+  }
+}
+
