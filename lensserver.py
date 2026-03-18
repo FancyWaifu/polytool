@@ -421,17 +421,19 @@ class LensServer:
 
     def _get_device_settings_formatted(self, device_id):
         """Get settings metadata + values in LensServiceApi format."""
-        from lens_settings import get_settings_for_device, settings_to_api_format
+        from lens_settings import (get_settings_for_device, settings_to_api_format,
+                                   get_device_family)
 
         dev = self.devices.get(device_id, {})
         ptd = dev.get("_polytool_dev", {})
         usage_page = ptd.get("usage_page", 0)
         dfu_executor = ptd.get("dfu_executor", "")
+        family = get_device_family(usage_page, dfu_executor)
 
         settings_defs = get_settings_for_device(usage_page, dfu_executor)
         current_values = self._device_settings_cache.get(device_id, {})
 
-        return settings_to_api_format(settings_defs, current_values)
+        return settings_to_api_format(settings_defs, current_values, family=family)
 
     def on_get_dfu_status(self, msg, client_sock):
         """Handle GetDeviceDFUStatus."""
@@ -602,6 +604,9 @@ class LensServer:
                     },
                 }
 
+                # Populate settings cache from real HID reads
+                self._populate_settings_cache(device_id, dev)
+
             # Remove devices no longer present
             removed = set(self.devices.keys()) - current_ids
             for did in removed:
@@ -630,6 +635,24 @@ class LensServer:
         except Exception as e:
             print(f"  Settings read error: {e}")
             return []
+
+    def _populate_settings_cache(self, device_id, dev):
+        """Read real settings from HID and populate the cache."""
+        try:
+            from device_settings import read_all_settings
+            settings = read_all_settings(
+                dev.path, dev.usage_page, dev.dfu_executor,
+            )
+            if settings:
+                cache = {}
+                for s in settings:
+                    if s.get("value") is not None and s.get("name"):
+                        cache[s["name"]] = s["value"]
+                if cache:
+                    self._device_settings_cache[device_id] = cache
+                    print(f"  Read {len(cache)} settings from {device_id} via HID")
+        except Exception as e:
+            print(f"  HID settings read failed for {device_id}: {e}")
 
     def write_device_setting(self, device_id, name, value):
         """Write a setting via our HID code."""

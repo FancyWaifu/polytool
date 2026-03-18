@@ -91,12 +91,16 @@ BLADERUNNER_SETTINGS = [
     {"name": "Language Selection", "type": "enum", "choices": ["English", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Swedish", "Norwegian", "Danish", "Finnish", "Japanese", "Korean", "Mandarin", "Cantonese", "Russian"], "default": "English"},
 ]
 
-# Device family → settings profile
+# Device family → (settings profile, read_only flag)
+# DECT settings are read-only: the DECT base station write protocol
+# has not been reverse-engineered yet. CX2070x and BladeRunner support writes.
 DEVICE_PROFILES = {
     "dect": DECT_SETTINGS,
     "cx2070x": CX2070X_SETTINGS,
     "bladerunner": BLADERUNNER_SETTINGS,
 }
+
+WRITABLE_FAMILIES = {"cx2070x", "bladerunner"}
 
 
 def get_device_family(usage_page, dfu_executor=""):
@@ -116,13 +120,16 @@ def get_settings_for_device(usage_page, dfu_executor=""):
     return DEVICE_PROFILES.get(family, DECT_SETTINGS)
 
 
-def settings_to_api_format(settings_defs, current_values=None):
+def settings_to_api_format(settings_defs, current_values=None, family=None):
     """Convert settings definitions to LensServiceApi format.
 
     Returns (metadata_list, settings_list) tuple.
+    family: device family string — DECT settings are marked read-only.
     """
     if current_values is None:
         current_values = {}
+
+    read_only = family not in WRITABLE_FAMILIES if family else False
 
     metadata = []
     values = []
@@ -137,8 +144,8 @@ def settings_to_api_format(settings_defs, current_values=None):
         meta_obj = {
             "type": stype,
             "visible": True,
-            "enabled": True,
-            "read_only": False,
+            "enabled": not read_only,
+            "read_only": read_only,
             "auto_supported": False,
             "default_value": default,
             "possible_values": s.get("choices", []),

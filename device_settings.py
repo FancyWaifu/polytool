@@ -599,11 +599,23 @@ def read_all_settings(path, usage_page, dfu_executor=""):
 
 
 def write_setting(path, usage_page, dfu_executor, name, value):
-    """Write a single setting to a device. Returns True on success."""
+    """Write a single setting to a device. Returns True on success.
+
+    Accepts both Poly Studio GUI setting names (e.g. "Sidetone") and
+    direct HID-layer names (e.g. "Sidetone Level"). The translation
+    layer maps GUI names + values to the appropriate HID writes.
+    """
     if hid is None:
         return False
 
     family = get_device_family(usage_page, dfu_executor)
+    if family == "dect":
+        # DECT settings are read-only via direct USB — the base station
+        # protocol for settings writes has not been reverse-engineered yet.
+        return False
+
+    # Translate Poly Studio GUI name/value → HID-layer name/value pairs
+    writes = _translate_lens_to_hid(family, name, value)
 
     h = None
     try:
@@ -611,11 +623,13 @@ def write_setting(path, usage_page, dfu_executor, name, value):
         h.open_path(path)
         h.set_nonblocking(0)
 
-        if family == "cx2070x":
-            return cx_write_setting(h, name, value)
-        elif family == "bladerunner":
-            return br_write_setting(h, name, value)
-        return False
+        success = True
+        for hid_name, hid_value in writes:
+            if family == "cx2070x":
+                success = cx_write_setting(h, hid_name, hid_value) and success
+            elif family == "bladerunner":
+                success = br_write_setting(h, hid_name, hid_value) and success
+        return success
     except Exception:
         return False
     finally:
@@ -624,3 +638,84 @@ def write_setting(path, usage_page, dfu_executor, name, value):
                 h.close()
             except Exception:
                 pass
+
+
+# ── Poly Studio → HID Translation Layer ─────────────────────────────────────
+# Maps Poly Studio GUI setting names (from lens_settings.py) to HID-layer
+# writes. One GUI setting can map to multiple HID writes (e.g. "Sidetone"
+# → both "Sidetone On/Off" + "Sidetone Level").
+
+_SIDETONE_LEVELS = {"low": 2, "medium": 5, "high": 8}
+
+# Per-family mapping: lens_name → function(value) → [(hid_name, hid_value), ...]
+_LENS_TO_HID_CX2070X = {
+    "Sidetone": lambda v: [
+        ("Sidetone On/Off", True),
+        ("Sidetone Level", _SIDETONE_LEVELS.get(str(v).lower(), 5)),
+    ],
+    "Sidetone Level": lambda v: [("Sidetone Level", int(v))],
+}
+
+_LENS_TO_HID_BLADERUNNER = {
+    "Sidetone": lambda v: [
+        ("Sidetone On/Off", True),
+        ("Sidetone Level", _SIDETONE_LEVELS.get(str(v).lower(), 5)),
+    ],
+    "EQ Preset": lambda v: [("EQ Preset", str(v))],
+    "Ringtone Volume": lambda v: [("Ringtone Volume", int(v))],
+    "Anti-Startle": lambda v: [
+        ("Anti-Startle Protection", str(v).lower() != "false"),
+        ("G616 Limiting", str(v).lower() == "enhanced"),
+    ],
+    "Anti Startle 2": lambda v: [
+        ("Anti-Startle Protection", str(v).lower() not in ("off", "false")),
+        ("G616 Limiting", str(v).lower() == "enhanced"),
+    ],
+    "Noise Exposure": lambda v: [
+        ("Noise Limiting", str(v).lower() not in ("off", "false")),
+    ],
+    "HD Voice": lambda v: [("HD Voice", _to_bool(v))],
+    "Auto-Answer": lambda v: [("Auto-Answer", _to_bool(v))],
+    "Wearing Sensor": lambda v: [("Wearing Sensor On/Off", _to_bool(v))],
+    "Online Indicator": lambda v: [("Online Indicator", _to_bool(v))],
+    "Mute Reminder Volume": lambda v: [
+        ("Mute Reminder Tone", str(v).lower() not in ("off", "false")),
+    ],
+    "Second Incoming Call": lambda v: [
+        ("Second Incoming Call", {
+            "ignore": "Ignore", "once": "Ring", "continuous": "Ring",
+        }.get(str(v).lower(), str(v))),
+    ],
+    "Volume Level Tones": lambda v: [],  # No BladeRunner equivalent
+    "Language Selection": lambda v: [("Language Selection", str(v))],
+    # Direct HID names pass through
+    "Sidetone Level": lambda v: [("Sidetone Level", int(v))],
+    "Sidetone On/Off": lambda v: [("Sidetone On/Off", _to_bool(v))],
+}
+
+
+def _to_bool(v):
+    """Convert various truthy representations to bool."""
+    if isinstance(v, bool):
+        return v
+    return str(v).lower() in ("true", "1", "yes", "on")
+
+
+def _translate_lens_to_hid(family, name, value):
+    """Translate a Poly Studio setting name/value to HID write pairs.
+
+    Returns list of (hid_name, hid_value) tuples. Falls through to
+    [(name, value)] if no translation exists (direct HID name).
+    """
+    if family == "cx2070x":
+        mapper = _LENS_TO_HID_CX2070X.get(name)
+    elif family == "bladerunner":
+        mapper = _LENS_TO_HID_BLADERUNNER.get(name)
+    else:
+        return [(name, value)]
+
+    if mapper:
+        return mapper(value)
+
+    # No translation found — pass through as-is (direct HID name)
+    return [(name, value)]
