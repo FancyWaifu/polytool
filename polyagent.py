@@ -63,7 +63,7 @@ log = logging.getLogger("polyagent")
 def get_agent_id():
     """Generate a stable agent ID from machine identity."""
     hostname = socket.gethostname()
-    mac = hex(os.getuid()) if hasattr(os, 'getuid') else "0"
+    mac = hex(os.getuid()) if hasattr(os, 'getuid') else os.environ.get('USERNAME', '0')
     raw = f"{hostname}-{platform.node()}-{mac}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 

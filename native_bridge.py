@@ -31,22 +31,61 @@ from pathlib import Path
 
 # ── Library Paths ────────────────────────────────────────────────────────────
 
-COMPONENTS_DIRS = [
-    # Poly Studio bundled legacyhost
-    Path("/private/tmp/PolyStudio.app/Contents/Helpers/LegacyHostApp.app/Contents/Components"),
-    Path("/Applications/Poly Studio.app/Contents/Helpers/LegacyHostApp.app/Contents/Components"),
-    # Standalone Poly Lens install
-    Path("/Applications/Poly Lens.app/Contents/Helpers/LegacyHostApp.app/Contents/Components"),
-    Path.home() / "Library/Application Support/Plantronics/legacyhost/Poly/LegacyHostApp/Components",
-]
+import platform as _platform
 
-LIB_NAMES = ["libPLTDeviceManager.dylib", "libNativeLoader.dylib"]
+def _build_components_dirs():
+    """Build platform-specific list of directories to search for native libraries."""
+    dirs = []
+    if sys.platform == "win32":
+        # Windows Poly Lens install locations
+        pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+        pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        pdata = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
+        localappdata = os.environ.get("LOCALAPPDATA", "")
+
+        for base in [pf, pf86]:
+            dirs.append(Path(base) / "Plantronics" / "Poly Lens Desktop" / "LegacyHostApp" / "Components")
+            dirs.append(Path(base) / "Poly" / "Poly Lens Desktop" / "LegacyHostApp" / "Components")
+        dirs.append(Path(pdata) / "Plantronics" / "legacyhost" / "Poly" / "LegacyHostApp" / "Components")
+        if localappdata:
+            dirs.append(Path(localappdata) / "Programs" / "Poly Studio" / "resources" / "LegacyHostApp" / "Components")
+    else:
+        # macOS
+        dirs = [
+            Path("/private/tmp/PolyStudio.app/Contents/Helpers/LegacyHostApp.app/Contents/Components"),
+            Path("/Applications/Poly Studio.app/Contents/Helpers/LegacyHostApp.app/Contents/Components"),
+            Path("/Applications/Poly Lens.app/Contents/Helpers/LegacyHostApp.app/Contents/Components"),
+            Path.home() / "Library/Application Support/Plantronics/legacyhost/Poly/LegacyHostApp/Components",
+        ]
+    return dirs
+
+COMPONENTS_DIRS = _build_components_dirs()
+
+def _get_lib_names():
+    """Return platform-specific library names."""
+    if sys.platform == "win32":
+        return [
+            "PLTDeviceManager.dll", "libPLTDeviceManager.dll",
+            "NativeLoader.dll", "libNativeLoader.dll",
+        ]
+    else:
+        return ["libPLTDeviceManager.dylib", "libNativeLoader.dylib"]
+
+def _get_loader_lib_name():
+    """Return the NativeLoader library name to probe for in find_components_dir()."""
+    if sys.platform == "win32":
+        return "NativeLoader.dll"
+    else:
+        return "libNativeLoader.dylib"
+
+LIB_NAMES = _get_lib_names()
 
 
 def find_components_dir():
     """Find the directory containing Poly native libraries."""
+    loader_name = _get_loader_lib_name()
     for d in COMPONENTS_DIRS:
-        if d.exists() and (d / "libNativeLoader.dylib").exists():
+        if d.exists() and ((d / loader_name).exists() or (d / ("lib" + loader_name)).exists()):
             return d
     return None
 
@@ -86,18 +125,33 @@ class NativeBridge:
         """Initialize the native bridge. Loads libraries, starts USB scanning."""
         print(f"  Loading native libraries from {self._dir}")
 
-        # Set rpath so dylibs can find each other
-        os.environ["DYLD_LIBRARY_PATH"] = str(self._dir)
+        if sys.platform == "win32":
+            # Windows: add DLL directory so dependent DLLs can be found
+            os.add_dll_directory(str(self._dir))
+        else:
+            # macOS: set rpath so dylibs can find each other
+            os.environ["DYLD_LIBRARY_PATH"] = str(self._dir)
 
         # Load dependencies first, then NativeLoader
+        # On Windows, try both with and without "lib" prefix
+        loaded_names = []
         for name in LIB_NAMES:
-            path = str(self._dir / name)
+            path = self._dir / name
+            if not path.exists():
+                continue
             try:
-                lib = ctypes.cdll.LoadLibrary(path)
+                if sys.platform == "win32":
+                    lib = ctypes.cdll.LoadLibrary(str(path))
+                else:
+                    lib = ctypes.cdll.LoadLibrary(str(path))
                 self._libs.append(lib)
+                loaded_names.append(name)
                 print(f"  Loaded {name}")
             except OSError as e:
                 raise OSError(f"Failed to load {name}: {e}")
+
+        if not self._libs:
+            raise OSError(f"No native libraries found in {self._dir}")
 
         self._native_loader = self._libs[-1]  # libNativeLoader
 

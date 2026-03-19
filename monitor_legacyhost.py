@@ -20,15 +20,22 @@ import json
 import argparse
 import re
 
-LOG_DIR_LEGACY = os.path.expanduser(
-    "~/Library/Application Support/Plantronics/legacyhost/Poly/LegacyHostApp/Logs"
-)
-LOG_DIR_CLOCKWORK = os.path.expanduser(
-    "~/Library/Application Support/Poly/Logs/Clockwork"
-)
-LOG_DIR_LCS = os.path.expanduser(
-    "~/Library/Application Support/Poly/Logs/Lens Control Service"
-)
+if sys.platform == "win32":
+    _pdata = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
+    LOG_DIR_LEGACY = os.path.join(_pdata, "Plantronics", "legacyhost", "Poly",
+                                  "LegacyHostApp", "Logs")
+    LOG_DIR_CLOCKWORK = os.path.join(_pdata, "Poly", "Logs", "Clockwork")
+    LOG_DIR_LCS = os.path.join(_pdata, "Poly", "Logs", "Lens Control Service")
+else:
+    LOG_DIR_LEGACY = os.path.expanduser(
+        "~/Library/Application Support/Plantronics/legacyhost/Poly/LegacyHostApp/Logs"
+    )
+    LOG_DIR_CLOCKWORK = os.path.expanduser(
+        "~/Library/Application Support/Poly/Logs/Clockwork"
+    )
+    LOG_DIR_LCS = os.path.expanduser(
+        "~/Library/Application Support/Poly/Logs/Lens Control Service"
+    )
 
 # Patterns we care about
 INTERESTING_PATTERNS = [

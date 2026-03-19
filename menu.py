@@ -12,6 +12,10 @@ import shutil
 import time
 from pathlib import Path
 
+# Enable ANSI escape codes on Windows 10+ terminals
+if sys.platform == "win32":
+    os.system("")
+
 # ── ANSI helpers ──────────────────────────────────────────────────────────────
 
 BOLD = "\033[1m"

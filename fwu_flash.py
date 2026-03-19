@@ -179,23 +179,45 @@ class FwuFlasher:
             self.h = None
 
     def timed_write(self, data, timeout=5):
-        def handler(signum, frame):
-            raise TimeoutError()
-        old = signal.signal(signal.SIGALRM, handler)
-        signal.alarm(timeout)
-        try:
-            self.h.write(data)
-            signal.alarm(0)
-            return True
-        except TimeoutError:
-            return False
-        except Exception as e:
-            signal.alarm(0)
-            print(f"  Write error: {e}")
-            return False
-        finally:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old)
+        if hasattr(signal, 'SIGALRM'):
+            # macOS/Linux: use SIGALRM for write timeout
+            def handler(signum, frame):
+                raise TimeoutError()
+            old = signal.signal(signal.SIGALRM, handler)
+            signal.alarm(timeout)
+            try:
+                self.h.write(data)
+                signal.alarm(0)
+                return True
+            except TimeoutError:
+                return False
+            except Exception as e:
+                signal.alarm(0)
+                print(f"  Write error: {e}")
+                return False
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old)
+        else:
+            # Windows: use threading timeout
+            import threading
+            result = [None]
+            exc = [None]
+            def _do_write():
+                try:
+                    self.h.write(data)
+                    result[0] = True
+                except Exception as e:
+                    exc[0] = e
+            t = threading.Thread(target=_do_write, daemon=True)
+            t.start()
+            t.join(timeout=timeout)
+            if t.is_alive():
+                return False
+            if exc[0]:
+                print(f"  Write error: {exc[0]}")
+                return False
+            return result[0] is True
 
     def build_cvm_msg(self, prim_id, params=b''):
         """Build a CVM API mail."""
@@ -674,14 +696,21 @@ def main():
     # Kill Poly Lens (all processes)
     if not args.no_kill:
         print("\nKilling Poly Lens...")
-        for proc in ["legacyhost", "LensService", "PolyLauncher",
-                      "Poly Studio", "CallControlApp"]:
-            subprocess.run(["pkill", "-9", "-f", proc], capture_output=True)
+        if sys.platform == "win32":
+            for proc in ["legacyhost.exe", "LensService.exe", "PolyLauncher.exe",
+                          "Poly Studio.exe", "CallControlApp.exe"]:
+                subprocess.run(["taskkill", "/F", "/IM", proc],
+                               capture_output=True)
+        else:
+            for proc in ["legacyhost", "LensService", "PolyLauncher",
+                          "Poly Studio", "CallControlApp"]:
+                subprocess.run(["pkill", "-9", "-f", proc], capture_output=True)
         time.sleep(2)
 
-    # USB reset for clean state
-    print("USB reset...")
-    usb_reset()
+    # USB reset for clean state (macOS only — clears IOKit cached handles)
+    if sys.platform == "darwin":
+        print("USB reset...")
+        usb_reset()
 
     # Find device
     flasher = FwuFlasher(dry_run=args.dry_run)

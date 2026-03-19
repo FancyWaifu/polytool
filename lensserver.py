@@ -38,8 +38,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 API_VERSION = "1.14.1"
 MSG_DELIM = "\x01"  # SOH byte — real LensService message separator (NOT newline)
 
-# Port file location
-PORT_FILE_DIR = Path.home() / "Library/Application Support/Poly/Lens Control Service"
+# Port file location (platform-specific)
+if sys.platform == "win32":
+    _pdata = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
+    PORT_FILE_DIR = Path(_pdata) / "Poly" / "Lens Control Service"
+else:
+    PORT_FILE_DIR = Path.home() / "Library/Application Support/Poly/Lens Control Service"
 PORT_FILE = PORT_FILE_DIR / "SocketPortNumber"
 
 
@@ -80,7 +84,10 @@ class LensServer:
         import atexit
         atexit.register(self._cleanup_port_file)
         import signal
-        for sig in (signal.SIGTERM, signal.SIGINT):
+        sigs = [signal.SIGINT]
+        if hasattr(signal, 'SIGTERM'):
+            sigs.append(signal.SIGTERM)
+        for sig in sigs:
             signal.signal(sig, lambda s, f: self._signal_shutdown())
 
         print(f"  Listening on port {self.port}")
