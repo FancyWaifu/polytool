@@ -30,6 +30,7 @@ import socket
 import time
 import threading
 import argparse
+import platform
 from pathlib import Path
 
 # Import our device tools
@@ -227,7 +228,7 @@ class LensServer:
                                 self.send_msg(client_sock, {
                                     "type": "SystemInformation",
                                     "apiVersion": API_VERSION,
-                                    "systemName": os.uname().nodename,
+                                    "systemName": platform.node(),
                                 })
                                 self.send_msg(client_sock, {
                                     "type": "LcsConfigurationInformation",
