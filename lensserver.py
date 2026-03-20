@@ -37,6 +37,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 API_VERSION = "1.14.1"
+
+# ── Console output control ──────────────────────────────────────────────────
+_verbose = False
+_quiet = False
+
+def _log(msg, verbose_only=False):
+    if _quiet:
+        return
+    if verbose_only and not _verbose:
+        return
+    print(msg)
 MSG_DELIM = "\x01"  # SOH byte — real LensService message separator (NOT newline)
 
 # Port file location (platform-specific)
@@ -91,10 +102,10 @@ class LensServer:
         for sig in sigs:
             signal.signal(sig, lambda s, f: self._signal_shutdown())
 
-        print(f"  Listening on port {self.port}")
-        print(f"  Port file: {PORT_FILE}")
+        _log(f"  Listening on port {self.port}")
+        _log(f"  Port file: {PORT_FILE}", verbose_only=True)
         if self._original_port:
-            print(f"  Original LCS port saved: {self._original_port}")
+            _log(f"  Original LCS port saved: {self._original_port}", verbose_only=True)
 
     def _signal_shutdown(self):
         """Handle SIGTERM/SIGINT — stop cleanly."""
@@ -105,7 +116,7 @@ class LensServer:
         try:
             if self._original_port:
                 PORT_FILE.write_text(self._original_port)
-                print(f"  Restored original LCS port: {self._original_port}")
+                _log(f"  Restored original LCS port: {self._original_port}", verbose_only=True)
             else:
                 PORT_FILE.unlink(missing_ok=True)
         except Exception:
@@ -141,7 +152,7 @@ class LensServer:
         while self.running:
             try:
                 client_sock, addr = self.server_sock.accept()
-                print(f"  Client connected from {addr}")
+                _log(f"  Client connected from {addr}")
                 t = threading.Thread(target=self.handle_client,
                                      args=(client_sock,), daemon=True)
                 t.start()
@@ -165,7 +176,7 @@ class LensServer:
                 for did in new_ids - old_ids:
                     dev = self.devices[did]
                     clean_dev = {k: v for k, v in dev.items() if not k.startswith("_")}
-                    print(f"  ++ Device added: {dev.get('productName', '?')}")
+                    _log(f"  ++ Device added: {dev.get('productName', '?')}")
                     self.broadcast({
                         "type": "DeviceAttached",
                         "apiVersion": API_VERSION,
@@ -187,14 +198,14 @@ class LensServer:
                     ptd = dev.get("_polytool_dev", {})
                     if ptd.get("_native_id"):
                         continue  # BT device from native bridge, not USB-discoverable
-                    print(f"  -- Device removed: {did}")
+                    _log(f"  -- Device removed: {did}")
                     self.broadcast({
                         "type": "DeviceDetached",
                         "apiVersion": API_VERSION,
                         "deviceId": did,
                     })
             except Exception as e:
-                print(f"  Scanner error: {e}")
+                _log(f"  Scanner error: {e}", verbose_only=True)
 
     def handle_client(self, client_sock):
         """Handle one client connection."""
@@ -216,7 +227,7 @@ class LensServer:
                         try:
                             msg = json.loads(line)
                             msg_type = msg.get("type", "?")
-                            print(f"  ← {msg_type}: {json.dumps(msg)[:150]}")
+                            _log(f"  ← {msg_type}: {json.dumps(msg)[:150]}", verbose_only=True)
                             if self.dump_mode and self.dump_file:
                                 self.dump_file.write(json.dumps({"dir": "IN", "msg": msg}) + "\n")
                                 self.dump_file.flush()
@@ -241,7 +252,7 @@ class LensServer:
                             if response:
                                 self.send_msg(client_sock, response)
                         except json.JSONDecodeError as e:
-                            print(f"  JSON error: {e} — raw: {line[:100]}")
+                            _log(f"  JSON error: {e} — raw: {line[:100]}", verbose_only=True)
                             pass
 
             except socket.timeout:
@@ -249,7 +260,7 @@ class LensServer:
             except (OSError, ConnectionResetError):
                 break
 
-        print(f"  Client disconnected")
+        _log(f"  Client disconnected")
         with self._lock:
             if client_sock in self.clients:
                 self.clients.remove(client_sock)
@@ -302,12 +313,12 @@ class LensServer:
         if handler:
             result = handler(msg, client_sock)
             if result:
-                print(f"  → {result.get('type', '?')}")
+                _log(f"  → {result.get('type', '?')}", verbose_only=True)
             return result
 
         # Catch-all — respond to any unknown message with an empty ack
         # This prevents the GUI from hanging waiting for a response
-        print(f"  Unknown: {msg_type} — {json.dumps(msg)[:150]}")
+        _log(f"  Unknown: {msg_type} — {json.dumps(msg)[:150]}", verbose_only=True)
         return {
             "type": msg_type.replace("Get", "").replace("Set", "") if msg_type.startswith(("Get", "Set")) else "Error",
             "apiVersion": API_VERSION,
@@ -319,7 +330,7 @@ class LensServer:
     def on_register(self, msg, client_sock):
         """Handle RegisterClient."""
         name = msg.get("name", "unknown")
-        print(f"  Client registered: {name}")
+        _log(f"  Client registered: {name}")
 
         # Send ClientRegistered — tell client not to use encryption
         self.send_msg(client_sock, {
@@ -340,7 +351,7 @@ class LensServer:
                 "apiVersion": API_VERSION,
                 "device": clean_dev,
             })
-            print(f"  → DeviceAttached: {dev.get('productName', '?')}")
+            _log(f"  → DeviceAttached: {dev.get('productName', '?')}", verbose_only=True)
 
             # Push battery info if available
             self._push_battery(client_sock, did)
@@ -388,7 +399,7 @@ class LensServer:
                 ],
             },
         })
-        print(f"  → Battery: {level_pct}%{' (charging)' if charging else ''}")
+        _log(f"  → Battery: {level_pct}%{' (charging)' if charging else ''}", verbose_only=True)
 
     def on_get_device_list(self, msg, client_sock):
         """Handle GetDeviceList."""
@@ -414,7 +425,7 @@ class LensServer:
                 "deviceId": device_id,
                 "settings": metadata,
             })
-            print(f"  → DeviceSettingsMetadata: {len(metadata)} settings")
+            _log(f"  → DeviceSettingsMetadata: {len(metadata)} settings", verbose_only=True)
 
         # Then send settings values
         self.send_msg(client_sock, {
@@ -491,7 +502,7 @@ class LensServer:
 
         # Try writing to device via HID
         success = self.write_device_setting(device_id, name, value)
-        print(f"  Set {name} = {value} [{'OK' if success else 'stored'}]")
+        _log(f"  Set {name} = {value} [{'OK' if success else 'stored'}]")
 
         # Broadcast the update to all clients
         update_msg = {
@@ -584,7 +595,7 @@ class LensServer:
                 **result,
             })
             status_str = ", ".join(result.get("statuses", []))
-            print(f"  Firmware check {device_id}: {status_str}")
+            _log(f"  Firmware check {device_id}: {status_str}", verbose_only=True)
 
         threading.Thread(target=_check, daemon=True).start()
 
@@ -652,7 +663,7 @@ class LensServer:
             }
 
         except Exception as e:
-            print(f"  Firmware check error for {device_id}: {e}")
+            _log(f"  Firmware check error for {device_id}: {e}", verbose_only=True)
             return {"version": "", "statuses": ["AvailableFirmwareVersionEqual"], "releaseNoteUrl": ""}
 
     def on_get_library_version(self, msg, client_sock):
@@ -733,10 +744,10 @@ class LensServer:
                 url_list = [{"url": img["node"]["url"]} for img in images if img.get("node", {}).get("url")]
                 result = json.dumps(url_list)
                 self._image_cache[pid] = result
-                print(f"  Images for {pid}: {len(url_list)} found")
+                _log(f"  Images for {pid}: {len(url_list)} found", verbose_only=True)
                 return result
         except Exception as e:
-            print(f"  Image fetch error: {e}")
+            _log(f"  Image fetch error: {e}", verbose_only=True)
 
         return None
 
@@ -829,7 +840,7 @@ class LensServer:
 
             return current_ids
         except Exception as e:
-            print(f"  Device discovery error: {e}")
+            _log(f"  Device discovery error: {e}")
             return set()
 
     def discover_native_devices(self):
@@ -926,7 +937,7 @@ class LensServer:
             self.devices[device_id]["isMuted"] = call_state.get("muted", False)
             self.devices[device_id]["isInCall"] = call_state.get("inCall", False)
 
-            print(f"    {name} (BT via native bridge, fw {fw_display})")
+            _log(f"    {name} (BT via native bridge, fw {fw_display})", verbose_only=True)
 
         # Query settings for all native bridge devices and populate cache
         self._populate_native_settings_cache(bridge)
@@ -986,7 +997,7 @@ class LensServer:
 
             if cache:
                 self._device_settings_cache[did] = cache
-                print(f"  Read {len(cache)} settings from native bridge for {dev.get('productName', did)}")
+                _log(f"  Read {len(cache)} settings from native bridge for {dev.get('productName', did)}")
 
     def read_device_settings(self, device_id):
         """Read settings for a device via our HID code."""
@@ -1004,7 +1015,7 @@ class LensServer:
             )
             return settings
         except Exception as e:
-            print(f"  Settings read error: {e}")
+            _log(f"  Settings read error: {e}", verbose_only=True)
             return []
 
     def _populate_settings_cache(self, device_id, dev):
@@ -1021,9 +1032,9 @@ class LensServer:
                         cache[s["name"]] = s["value"]
                 if cache:
                     self._device_settings_cache[device_id] = cache
-                    print(f"  Read {len(cache)} settings from {device_id} via HID")
+                    _log(f"  Read {len(cache)} settings from {device_id} via HID")
         except Exception as e:
-            print(f"  HID settings read failed for {device_id}: {e}")
+            _log(f"  HID settings read failed for {device_id}: {e}", verbose_only=True)
 
     def write_device_setting(self, device_id, name, value):
         """Write a setting to device. Uses direct HID for CX2070x/BladeRunner,
@@ -1056,7 +1067,7 @@ class LensServer:
                 name, value,
             )
         except Exception as e:
-            print(f"  Settings write error: {e}")
+            _log(f"  Settings write error: {e}")
             return False
 
     # ── DECT Native Bridge ────────────────────────────────────────────────────
@@ -1088,25 +1099,25 @@ class LensServer:
                     break
             self._native_bridge = bridge
             devs = bridge.get_devices()
-            print(f"  Native bridge: {len(devs)} device(s)")
+            _log(f"  Native bridge: {len(devs)} device(s)", verbose_only=True)
             for did, dev in devs.items():
-                print(f"    native id={did}: {dev.get('name', '?')}")
+                _log(f"    native id={did}: {dev.get('name', '?')}", verbose_only=True)
             return bridge
         except Exception as e:
-            print(f"  Native bridge unavailable: {e}")
+            _log(f"  Native bridge unavailable: {e}")
             return None
 
     def _proxy_dect_write(self, device_id, name, value):
         """Write a DECT setting via the native bridge (direct dylib call)."""
         bridge = self._get_native_bridge()
         if not bridge:
-            print(f"  DECT write failed: native bridge not available")
+            _log(f"  DECT write failed: native bridge not available")
             return False
 
         from native_bridge import setting_name_to_id
         setting_id = setting_name_to_id(name)
         if not setting_id:
-            print(f"  DECT write: unknown setting '{name}'")
+            _log(f"  DECT write: unknown setting '{name}'")
             return False
 
         # Find the native device ID (int64 from the native library)
@@ -1130,12 +1141,12 @@ class LensServer:
                     break
 
         if not native_dev_id:
-            print(f"  DECT write: no native device ID")
+            _log(f"  DECT write: no native device ID")
             return False
 
         result = bridge.set_setting(native_dev_id, setting_id, value)
         if result:
-            print(f"  DECT native: {name} ({setting_id}) = {value} [OK]")
+            _log(f"  DECT native: {name} ({setting_id}) = {value} [OK]")
             # Wait for confirmation
             bridge.recv(timeout=2.0)
         return result
@@ -1144,47 +1155,70 @@ class LensServer:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    global _verbose, _quiet
+
     parser = argparse.ArgumentParser(
         description="LensServer — Drop-in Poly Lens Control Service replacement",
     )
     parser.add_argument("--port", type=int, default=0, help="TCP port (0=auto)")
     parser.add_argument("--dump", action="store_true", help="Dump all messages to dump.jsonl")
+    parser.add_argument("--verbose", action="store_true", help="Show all protocol messages and debug output")
+    parser.add_argument("--quiet", action="store_true", help="Suppress all output except errors")
     args = parser.parse_args()
+
+    _verbose = args.verbose
+    _quiet = args.quiet
 
     server = LensServer(port=args.port)
     server.dump_mode = getattr(args, 'dump', False)
     if server.dump_mode:
         server.dump_file = open('dump.jsonl', 'w')
-        print(f"  Dumping all messages to dump.jsonl")
-
-    print(f"\n  LensServer — Poly Lens Replacement")
-    print(f"  {'='*40}")
+        _log(f"  Dumping all messages to dump.jsonl")
 
     # Discover devices (USB first, then BT via native bridge)
-    print(f"\n  Scanning for USB devices...")
+    _log(f"  Scanning for USB devices...", verbose_only=True)
     ids = server.discover_devices()
-    print(f"  Found {len(ids)} USB device(s)")
+    _log(f"  Found {len(ids)} USB device(s)", verbose_only=True)
 
-    print(f"  Scanning for BT devices via native bridge...")
+    _log(f"  Scanning for BT devices via native bridge...", verbose_only=True)
     server.discover_native_devices()
 
-    print(f"  Total: {len(server.devices)} device(s)")
+    # Start server
+    _log(f"  Starting TCP server...", verbose_only=True)
+    server.start()
+
+    # Count settings per device
+    def _settings_count(did):
+        n = len(server._device_settings_cache.get(did, {}))
+        dp = server._dynamic_profiles.get(did, [])
+        return max(n, len(dp))
+
+    # Determine native bridge status
+    nb = server._native_bridge
+    nb_devs = nb.get_devices() if nb else {}
+    nb_status = f"active ({len(nb_devs)} device{'s' if len(nb_devs) != 1 else ''})" if nb else "unavailable"
+
+    # Print startup banner
+    print(f"\n  PolyTool LensServer v1.0")
+    print(f"  {'═' * 30}")
+    print(f"  Devices: {len(server.devices)}")
     for did, dev in server.devices.items():
         conn = "BT" if dev.get("connectionType") == "Bluetooth" else "USB"
-        print(f"    {dev['productName']} (fw {dev['firmwareVersion']}) [{conn}]")
-
-    # Start server
-    print(f"\n  Starting TCP server...")
-    server.start()
-    print(f"\n  Open Poly Studio — it will connect automatically.\n")
+        sc = _settings_count(did)
+        sc_str = f" — {sc} settings" if sc else ""
+        print(f"    {dev['productName']} (fw {dev['firmwareVersion']}) [{conn}]{sc_str}")
+    print(f"  Native bridge: {nb_status}")
+    print(f"  Server: 127.0.0.1:{server.port}")
+    print(f"  Port file: {PORT_FILE}")
+    print(f"\n  Waiting for Poly Studio to connect...\n")
 
     try:
         server.accept_clients()
     except KeyboardInterrupt:
-        print(f"\n  Shutting down...")
+        _log(f"\n  Shutting down...")
     finally:
         server.stop()
-        print(f"  Stopped.")
+        _log(f"  Stopped.")
 
 
 if __name__ == "__main__":

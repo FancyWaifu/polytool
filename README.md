@@ -16,21 +16,14 @@ Open-source toolkit for managing Poly/Plantronics USB headsets. Drop-in replacem
 
 ## Quick Start
 
-**Single workstation:**
 ```bash
-pip install -r requirements.txt
-python3 polylens.py          # Web dashboard at localhost:8420
-```
+pip install hidapi requests flask
 
-**Use with Poly Studio GUI:**
-```bash
-python3 lensserver.py        # Poly Studio auto-connects and shows your devices
-```
+# Start the server — Poly Studio connects automatically
+python3 lensserver.py
 
-**CLI:**
-```bash
-python3 polytool.py scan     # Discover devices
-python3 menu.py              # Interactive terminal menu
+# Or use verbose mode for debugging
+python3 lensserver.py --verbose
 ```
 
 ## Supported Devices

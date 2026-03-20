@@ -386,11 +386,29 @@ class NativeBridge:
         time.sleep(2)
 
     def _stop_direct(self):
-        """Shut down direct-mode native bridge."""
+        """Shut down direct-mode native bridge.
+
+        NativeLoader_Exit() triggers a libc++ mutex crash during cleanup —
+        cosmetic only, but noisy. Redirect stderr at both Python and fd level
+        to suppress it (native code writes to fd 2 directly).
+        """
+        old_stderr = sys.stderr
+        old_fd = os.dup(2)
         try:
+            devnull = open(os.devnull, 'w')
+            sys.stderr = devnull
+            os.dup2(devnull.fileno(), 2)
             self._fn_exit()
         except Exception:
             pass
+        finally:
+            os.dup2(old_fd, 2)
+            os.close(old_fd)
+            sys.stderr = old_stderr
+            try:
+                devnull.close()
+            except Exception:
+                pass
         time.sleep(0.5)
 
     # ── Public API ───────────────────────────────────────────────────────
