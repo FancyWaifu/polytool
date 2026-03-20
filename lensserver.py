@@ -533,12 +533,11 @@ class LensServer:
         pid = ptd.get("pid", 0)
         family = get_device_family(usage_page, dfu_executor, pid=pid)
 
-        # Use dynamic profile if available (built from native bridge device query)
-        # Falls back to hardcoded profile if native bridge isn't available
-        if device_id in self._dynamic_profiles:
-            settings_defs = self._dynamic_profiles[device_id]
-        else:
-            settings_defs = get_settings_for_device(usage_page, dfu_executor, pid=pid)
+        # Use whichever profile has more settings: dynamic (from native bridge)
+        # or hardcoded (from lens_settings.py)
+        hardcoded_defs = get_settings_for_device(usage_page, dfu_executor, pid=pid)
+        dynamic_defs = self._dynamic_profiles.get(device_id, [])
+        settings_defs = dynamic_defs if len(dynamic_defs) > len(hardcoded_defs) else hardcoded_defs
 
         current_values = self._device_settings_cache.get(device_id, {})
 
