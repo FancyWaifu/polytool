@@ -84,16 +84,12 @@ DECT_SETTINGS = [
 ]
 
 CX2070X_SETTINGS = [
-    # ── Ringtones & Volume ──
+    # CX2070x is a wired USB headset — limited hardware settings.
+    # Only sidetone registers (0x191A, 0x1900) are verified writable.
     {"name": "Sidetone", "type": "enum", "choices": _choices("Sidetone") or ["low", "medium", "high"], "default": _choice_default("Sidetone", "Medium")},
     {"name": "Volume Level Tones", "type": "enum", "choices": _choices("Volume Level Tones") or ["atEveryLevel", "minMaxOnly"], "default": _choice_default("Volume Level Tones", "At Every Level")},
-    # ── General ──
     {"name": "Online Indicator", "type": "bool", "default": True},
-    {"name": "Wearing Sensor", "type": "bool", "default": False},
-    # ── Advanced ──
     {"name": "Anti Startle 2", "type": "enum", "choices": _choices("Anti Startle 2") or ["off", "standard", "enhanced"], "default": _choice_default("Anti Startle 2", "Standard")},
-    {"name": "Noise Exposure", "type": "enum", "choices": _choices("Noise Exposure") or ["off", "85db", "80db"], "default": _choice_default("Noise Exposure", "Limit at 85 dBA")},
-    {"name": "Hours on Phone Per Day", "type": "enum", "choices": _choices("Hours on Phone Per Day") or ["2", "4", "6", "8", "off"], "default": _choice_default("Hours on Phone Per Day", "Off")},
 ]
 
 BLADERUNNER_SETTINGS = [
