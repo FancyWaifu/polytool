@@ -495,6 +495,20 @@ class LensServer:
                 msg.get("valueEnum",
                 msg.get("value"))))))  # fallback to generic 'value'
 
+        # Admin password bypass — always accept, unlocking admin settings
+        if name == "Login Password":
+            _log(f"  Admin password accepted (bypass) for {device_id}")
+            # Renderer waits for DeviceSettingUpdated with status=true
+            self.send_msg(client_sock, {
+                "type": "DeviceSettingUpdated",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+                "settingName": name,
+                "status": True,
+                "errorDesc": "",
+            })
+            return None  # already sent
+
         # Store in cache
         if device_id not in self._device_settings_cache:
             self._device_settings_cache[device_id] = {}
