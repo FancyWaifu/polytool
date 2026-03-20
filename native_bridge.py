@@ -423,11 +423,6 @@ def build_dynamic_profile(hex_ids):
     return profile
 
 
-def setting_name_to_id(name):
-    """Convert a Poly Studio setting name to its native hex ID."""
-    return DECT_SETTING_IDS.get(name) or VOYAGER_SETTING_IDS.get(name)
-
-
 # ── Standalone Test ──────────────────────────────────────────────────────────
 
 def main():

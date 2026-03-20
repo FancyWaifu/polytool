@@ -84,28 +84,30 @@ DECT_SETTINGS = [
 ]
 
 CX2070X_SETTINGS = [
-    # CX2070x is a wired USB headset — limited hardware settings.
-    # Only sidetone registers (0x191A, 0x1900) are verified writable.
+    # Blackwire 3220 — wired USB, CX2070x chip
+    # Hardware registers: sidetone only (0x191A gain, 0x1900 enable)
+    # Volume/mute via standard USB Audio class (OS controls)
     {"name": "Sidetone", "type": "enum", "choices": _choices("Sidetone") or ["low", "medium", "high"], "default": _choice_default("Sidetone", "Medium")},
-    {"name": "Volume Level Tones", "type": "enum", "choices": _choices("Volume Level Tones") or ["atEveryLevel", "minMaxOnly"], "default": _choice_default("Volume Level Tones", "At Every Level")},
-    {"name": "Online Indicator", "type": "bool", "default": True},
     {"name": "Anti Startle 2", "type": "enum", "choices": _choices("Anti Startle 2") or ["off", "standard", "enhanced"], "default": _choice_default("Anti Startle 2", "Standard")},
 ]
 
 BLADERUNNER_SETTINGS = [
-    {"name": "Sidetone", "type": "enum", "choices": _choices("Sidetone") or ["Low", "Medium", "High"], "default": "Medium"},
-    {"name": "EQ Preset", "type": "enum", "choices": ["Default", "Bass Boost", "Bright", "Warm"], "default": "Default"},
-    {"name": "Ringtone Volume", "type": "int", "min": 0, "max": 10, "default": 5},
-    {"name": "Anti-Startle", "type": "enum", "choices": _choices("Anti Startle 2") or ["Off", "Standard", "Enhanced"], "default": "Standard"},
-    {"name": "Noise Exposure", "type": "enum", "choices": _choices("Noise Exposure") or ["Limit at 85 dBA", "Limit at 80 dBA", "No Limiting"], "default": "Limit at 85 dBA"},
-    {"name": "HD Voice", "type": "bool", "default": True},
+    # Blackwire 33xx/7225/8225, EncorePro, Sync 20/40/60 — wired USB, TI chip
+    # Settings via BladeRunner GET_SETTING/SET_SETTING HID protocol
+    # ── Ringtones & Volume ──
+    {"name": "Sidetone", "type": "enum", "choices": _choices("Sidetone") or ["low", "medium", "high"], "default": _choice_default("Sidetone", "Medium")},
+    {"name": "Volume Level Tones", "type": "enum", "choices": _choices("Volume Level Tones") or ["atEveryLevel", "minMaxOnly"], "default": _choice_default("Volume Level Tones", "At Every Level")},
+    {"name": "Mute On/Off Alerts", "type": "enum", "choices": _choices("Mute On/Off Alerts") or ["voice", "singleTone", "doubleTone"], "default": _choice_default("Mute On/Off Alerts", "Voice")},
+    # ── General ──
+    {"name": "Online Indicator", "type": "bool", "default": True},
     {"name": "Auto-Answer", "type": "bool", "default": False},
     {"name": "Wearing Sensor", "type": "bool", "default": False},
-    {"name": "Online Indicator", "type": "bool", "default": True},
-    {"name": "Mute Reminder Volume", "type": "enum", "choices": _choices("Mute Reminder Volume") or ["Off", "Low volume", "Standard volume"], "default": "Standard volume"},
-    {"name": "Second Incoming Call", "type": "enum", "choices": _choices("Second Incoming Call") or ["Ignore", "Ring Once", "Ring Continuous"], "default": "Ignore"},
-    {"name": "Volume Level Tones", "type": "enum", "choices": _choices("Volume Level Tones") or ["At Every Level", "Minimum & Maximum Only"], "default": "At Every Level"},
-    {"name": "Language Selection", "type": "enum", "choices": ["English", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Swedish", "Norwegian", "Danish", "Finnish", "Japanese", "Korean", "Mandarin", "Cantonese", "Russian"], "default": "English"},
+    {"name": "Notification Tones", "type": "bool", "default": True},
+    {"name": "Second Incoming Call", "type": "enum", "choices": _choices("Second Incoming Call") or ["ignore", "once", "continuous"], "default": _choice_default("Second Incoming Call", "Ignore")},
+    # ── Advanced ──
+    {"name": "Anti Startle 2", "type": "enum", "choices": _choices("Anti Startle 2") or ["off", "standard", "enhanced"], "default": _choice_default("Anti Startle 2", "Standard")},
+    {"name": "Noise Exposure", "type": "enum", "choices": _choices("Noise Exposure") or ["off", "85db", "80db"], "default": _choice_default("Noise Exposure", "No Limiting")},
+    {"name": "Hours on Phone Per Day", "type": "enum", "choices": _choices("Hours on Phone Per Day") or ["2", "4", "6", "8", "off"], "default": _choice_default("Hours on Phone Per Day", "Off")},
 ]
 
 VOYAGER_BT_SETTINGS = [
