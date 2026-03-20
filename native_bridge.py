@@ -44,8 +44,11 @@ def _build_components_dirs():
         localappdata = os.environ.get("LOCALAPPDATA", "")
 
         for base in [pf, pf86]:
-            dirs.append(Path(base) / "Plantronics" / "Poly Lens Desktop" / "LegacyHostApp" / "Components")
+            # Poly Studio install
+            dirs.append(Path(base) / "Poly" / "Poly Studio" / "LegacyHost")
+            # Poly Lens Desktop install
             dirs.append(Path(base) / "Poly" / "Poly Lens Desktop" / "LegacyHostApp" / "Components")
+            dirs.append(Path(base) / "Plantronics" / "Poly Lens Desktop" / "LegacyHostApp" / "Components")
         dirs.append(Path(pdata) / "Plantronics" / "legacyhost" / "Poly" / "LegacyHostApp" / "Components")
         if localappdata:
             dirs.append(Path(localappdata) / "Programs" / "Poly Studio" / "resources" / "LegacyHostApp" / "Components")
