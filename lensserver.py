@@ -533,8 +533,9 @@ class LensServer:
         pid = ptd.get("pid", 0)
         family = get_device_family(usage_page, dfu_executor, pid=pid)
 
-        # For native bridge devices, use dynamic profile built from actual device capabilities
-        if ptd.get("_native_id") and device_id in self._dynamic_profiles:
+        # Use dynamic profile if available (built from native bridge device query)
+        # Falls back to hardcoded profile if native bridge isn't available
+        if device_id in self._dynamic_profiles:
             settings_defs = self._dynamic_profiles[device_id]
         else:
             settings_defs = get_settings_for_device(usage_page, dfu_executor, pid=pid)
@@ -943,10 +944,23 @@ class LensServer:
         time.sleep(3)
         bridge.recv(timeout=1)
 
-        # Map native IDs to our device IDs and populate cache + dynamic profiles
+        # Map native bridge devices to ALL our devices (including USB-discovered ones)
+        # by matching PID. This gives USB devices dynamic profiles too.
+        native_devs = bridge.get_devices()
         for did, dev in self.devices.items():
             ptd = dev.get("_polytool_dev", {})
             native_id = ptd.get("_native_id", "")
+
+            # If no native_id, try matching by PID
+            if not native_id:
+                dev_pid = ptd.get("pid", 0)
+                for nid, ndev in native_devs.items():
+                    if ndev.get("pid") == dev_pid:
+                        native_id = nid
+                        # Store for future use
+                        ptd["_native_id"] = nid
+                        break
+
             if not native_id:
                 continue
 
@@ -1020,12 +1034,16 @@ class LensServer:
         if not ptd:
             return False
 
+        # If device has a native bridge ID, prefer native bridge for writes
+        if ptd.get("_native_id"):
+            return self._proxy_dect_write(device_id, name, value)
+
         from lens_settings import get_device_family
         family = get_device_family(
             ptd.get("usage_page", 0), ptd.get("dfu_executor", ""),
             pid=ptd.get("pid", 0))
 
-        # DECT / Voyager: write through native bridge
+        # DECT / Voyager without native ID: try native bridge anyway
         if family in ("dect", "voyager_bt", "voyager_base"):
             return self._proxy_dect_write(device_id, name, value)
 
