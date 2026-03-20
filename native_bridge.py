@@ -93,6 +93,76 @@ def find_components_dir():
     return None
 
 
+# ── Architecture Detection ──────────────────────────────────────────────────
+
+import struct as _struct
+
+def _python_bits():
+    """Return the bitness of the running Python (32 or 64)."""
+    return _struct.calcsize("P") * 8
+
+
+def _dll_bits(path):
+    """Return the bitness of a PE DLL/EXE (32 or 64), or None on error."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0x3C)
+            pe_offset = _struct.unpack("<I", f.read(4))[0]
+            f.seek(pe_offset + 4)  # skip PE signature
+            machine = _struct.unpack("<H", f.read(2))[0]
+            return {0x14C: 32, 0x8664: 64, 0xAA64: 64}.get(machine)
+    except Exception:
+        return None
+
+
+def _needs_proxy(components_dir):
+    """Check if we need a 32-bit subprocess proxy to load the DLLs."""
+    if sys.platform != "win32":
+        return False
+    py_bits = _python_bits()
+    loader_name = _get_loader_lib_name()
+    for name in [loader_name, "lib" + loader_name]:
+        p = components_dir / name
+        if p.exists():
+            dll_arch = _dll_bits(str(p))
+            if dll_arch and dll_arch != py_bits:
+                return True
+    return False
+
+
+_PYTHON32_SEARCH_PATHS = [
+    Path("C:/Python312-32/python.exe"),
+    Path("C:/Python311-32/python.exe"),
+    Path("C:/Python310-32/python.exe"),
+    Path("C:/Python39-32/python.exe"),
+]
+
+
+def _find_python32():
+    """Find a 32-bit Python interpreter for the subprocess proxy."""
+    # Check known embeddable/install locations
+    for p in _PYTHON32_SEARCH_PATHS:
+        if p.exists():
+            bits = _dll_bits(str(p))
+            if bits == 32:
+                return str(p)
+    # Try py launcher
+    import subprocess as _sp
+    for ver in ["3.12", "3.11", "3.10", "3.9", "3"]:
+        try:
+            result = _sp.run(
+                ["py", f"-{ver}-32", "-c", "import sys; print(sys.executable)"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                exe = result.stdout.strip()
+                if exe and Path(exe).exists():
+                    return exe
+        except Exception:
+            continue
+    return None
+
+
 # ── Callback Type ────────────────────────────────────────────────────────────
 
 # receiver_t = void (*)(const char*)
@@ -102,13 +172,22 @@ RECEIVER_FUNC = ctypes.CFUNCTYPE(None, ctypes.c_char_p)
 # ── Native Bridge ────────────────────────────────────────────────────────────
 
 class NativeBridge:
-    """Direct interface to Poly's native HID/DECT settings library."""
+    """Direct interface to Poly's native HID/DECT settings library.
+
+    Automatically detects architecture mismatches (e.g. 32-bit DLLs with
+    64-bit Python) and spawns a 32-bit subprocess proxy when needed.
+    """
 
     def __init__(self, components_dir=None):
         self._dir = components_dir or find_components_dir()
         if not self._dir:
             raise FileNotFoundError(
                 "Poly native libraries not found. Install Poly Studio or Poly Lens.")
+        self._dir = Path(self._dir)
+
+        self._use_proxy = _needs_proxy(self._dir)
+        self._proxy_proc = None
+        self._proxy_reader = None
 
         self._libs = []
         self._native_loader = None
@@ -124,29 +203,140 @@ class NativeBridge:
         self._primary_device = ""
         self._callback_ref = None   # prevent GC of callback
 
-    def start(self):
-        """Initialize the native bridge. Loads libraries, starts USB scanning."""
-        print(f"  Loading native libraries from {self._dir}")
+    # ── Proxy-mode helpers ───────────────────────────────────────────────
 
+    def _proxy_send(self, msg):
+        """Send a command to the 32-bit worker process."""
+        line = json.dumps(msg, separators=(",", ":")) + "\n"
+        self._proxy_proc.stdin.write(line)
+        self._proxy_proc.stdin.flush()
+
+    def _proxy_reader_thread(self):
+        """Background thread that reads stdout from the 32-bit worker."""
+        proc = self._proxy_proc
+        while self._running and proc.poll() is None:
+            try:
+                line = proc.stdout.readline()
+            except Exception:
+                break
+            if not line:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            msg_type = msg.get("type", "")
+
+            if msg_type == "callback":
+                # Native library callback — process the same as _on_received
+                native_msg = msg.get("message", {})
+                self._process_native_message(native_msg)
+            elif msg_type == "error":
+                print(f"  Worker error: {msg.get('error')}")
+            elif msg_type == "loaded_lib":
+                print(f"  Loaded {msg.get('name')} (via 32-bit worker)")
+            elif msg_type == "started":
+                print("  StartNativeBridge done (via 32-bit worker)")
+            elif msg_type == "send_result":
+                ok = msg.get("ok", False)
+                tid = msg.get("trackId", "?")
+                print(f"  >> Native: trackId={tid} = {'OK' if ok else 'FAIL'}")
+            elif msg_type in ("ready", "pong", "stopped"):
+                pass  # internal control messages
+
+    def _start_proxy(self):
+        """Launch the 32-bit Python subprocess worker."""
+        import subprocess as _sp
+
+        py32 = _find_python32()
+        if not py32:
+            dll_bits = 32 if _python_bits() == 64 else 64
+            raise OSError(
+                f"Poly native DLLs are {dll_bits}-bit but Python is {_python_bits()}-bit. "
+                f"Install 32-bit Python (embeddable) to C:\\Python312-32\\ or via "
+                f"'py -{dll_bits // 8 * 4}-32' to enable the architecture bridge.\n"
+                f"Download: https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-win32.zip"
+            )
+
+        worker_script = Path(__file__).parent / "native_bridge_worker.py"
+        if not worker_script.exists():
+            raise FileNotFoundError(f"Worker script not found: {worker_script}")
+
+        print(f"  DLL/Python architecture mismatch detected")
+        print(f"  Python is {_python_bits()}-bit, DLLs are {64 if _python_bits() == 32 else 32}-bit")
+        print(f"  Launching 32-bit worker: {py32}")
+
+        self._proxy_proc = _sp.Popen(
+            [py32, str(worker_script)],
+            stdin=_sp.PIPE, stdout=_sp.PIPE, stderr=_sp.PIPE,
+            text=True, bufsize=1,  # line-buffered
+        )
+
+        # Wait for ready message
+        ready_line = self._proxy_proc.stdout.readline().strip()
+        if not ready_line:
+            stderr = self._proxy_proc.stderr.read()
+            raise OSError(f"32-bit worker failed to start: {stderr}")
+        ready = json.loads(ready_line)
+        if ready.get("type") != "ready":
+            raise OSError(f"Unexpected worker response: {ready}")
+        print(f"  32-bit worker ready (PID {ready.get('pid')})")
+
+        # Start background reader thread
+        self._running = True
+        self._proxy_reader = threading.Thread(
+            target=self._proxy_reader_thread, daemon=True)
+        self._proxy_reader.start()
+
+        # Tell worker to load the DLLs
+        self._proxy_send({"cmd": "start", "components_dir": str(self._dir)})
+
+        # Give the worker time to load DLLs and start scanning
+        time.sleep(3)
+
+    def _stop_proxy(self):
+        """Shut down the 32-bit worker process."""
+        if self._proxy_proc and self._proxy_proc.poll() is None:
+            try:
+                self._proxy_send({"cmd": "stop"})
+                self._proxy_proc.wait(timeout=5)
+            except Exception:
+                self._proxy_proc.kill()
+        self._proxy_proc = None
+
+    # ── Direct-mode (same-arch) start/stop ───────────────────────────────
+
+    @staticmethod
+    def _resolve_func(lib, plain_name, mangled_name):
+        """Try to resolve a function by plain name first, then C++ mangled."""
+        try:
+            return getattr(lib, plain_name)
+        except AttributeError:
+            pass
+        if mangled_name:
+            try:
+                return getattr(lib, mangled_name)
+            except AttributeError:
+                pass
+        return None
+
+    def _start_direct(self):
+        """Load native libraries directly (same architecture)."""
         if sys.platform == "win32":
-            # Windows: add DLL directory so dependent DLLs can be found
             os.add_dll_directory(str(self._dir))
         else:
-            # macOS: set rpath so dylibs can find each other
             os.environ["DYLD_LIBRARY_PATH"] = str(self._dir)
 
-        # Load dependencies first, then NativeLoader
-        # On Windows, try both with and without "lib" prefix
         loaded_names = []
         for name in LIB_NAMES:
             path = self._dir / name
             if not path.exists():
                 continue
             try:
-                if sys.platform == "win32":
-                    lib = ctypes.cdll.LoadLibrary(str(path))
-                else:
-                    lib = ctypes.cdll.LoadLibrary(str(path))
+                lib = ctypes.cdll.LoadLibrary(str(path))
                 self._libs.append(lib)
                 loaded_names.append(name)
                 print(f"  Loaded {name}")
@@ -156,31 +346,63 @@ class NativeBridge:
         if not self._libs:
             raise OSError(f"No native libraries found in {self._dir}")
 
-        self._native_loader = self._libs[-1]  # libNativeLoader
+        self._native_loader = self._libs[-1]
 
-        # Set up function signatures
-        self._native_loader.NativeLoader_Init.argtypes = [RECEIVER_FUNC]
-        self._native_loader.NativeLoader_Init.restype = None
+        # Resolve functions — Windows DLLs use C++ mangled names
+        self._fn_init = self._resolve_func(
+            self._native_loader, "NativeLoader_Init",
+            "?NativeLoader_Init@@YAXP6AXPBD@Z@Z")
+        self._fn_send = self._resolve_func(
+            self._native_loader, "NativeLoader_SendToNative",
+            "?NativeLoader_SendToNative@@YA_NPBD@Z")
+        self._fn_exit = self._resolve_func(
+            self._native_loader, "NativeLoader_Exit",
+            "?NativeLoader_Exit@@YAXXZ")
 
-        self._native_loader.NativeLoader_SendToNative.argtypes = [ctypes.c_char_p]
-        self._native_loader.NativeLoader_SendToNative.restype = ctypes.c_bool
+        if not self._fn_init or not self._fn_send or not self._fn_exit:
+            raise OSError("Required NativeLoader functions not found in DLL exports")
 
-        self._native_loader.NativeLoader_Exit.argtypes = []
-        self._native_loader.NativeLoader_Exit.restype = None
+        self._fn_init.argtypes = [RECEIVER_FUNC]
+        self._fn_init.restype = None
+        self._fn_send.argtypes = [ctypes.c_char_p]
+        self._fn_send.restype = ctypes.c_bool
+        self._fn_exit.argtypes = []
+        self._fn_exit.restype = None
 
-        # Create and register callback (prevent GC!)
         self._callback_ref = RECEIVER_FUNC(self._on_received)
-        self._native_loader.NativeLoader_Init(self._callback_ref)
+        self._fn_init(self._callback_ref)
         print("  NativeLoader_Init done")
 
-        # Start the native bridge (begins USB device scanning)
-        try:
-            self._native_loader.StartNativeBridge()
-            print("  StartNativeBridge done")
-        except Exception as e:
-            print(f"  StartNativeBridge: {e}")
+        # StartNativeBridge is a macOS-only export; on Windows, Init starts scanning
+        fn_start = self._resolve_func(self._native_loader, "StartNativeBridge", None)
+        if fn_start:
+            try:
+                fn_start()
+                print("  StartNativeBridge done")
+            except Exception as e:
+                print(f"  StartNativeBridge: {e}")
 
         self._running = True
+        time.sleep(2)
+
+    def _stop_direct(self):
+        """Shut down direct-mode native bridge."""
+        try:
+            self._fn_exit()
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    # ── Public API ───────────────────────────────────────────────────────
+
+    def start(self):
+        """Initialize the native bridge. Loads libraries, starts USB scanning."""
+        print(f"  Loading native libraries from {self._dir}")
+
+        if self._use_proxy:
+            self._start_proxy()
+        else:
+            self._start_direct()
 
         # Wait a moment for device discovery
         time.sleep(2)
@@ -190,75 +412,81 @@ class NativeBridge:
         if not self._running:
             return
         self._running = False
-        # NativeLoader_Exit triggers cleanup threads that may race on shutdown.
-        # Suppress the C++ exception by giving threads time to wind down.
-        try:
-            self._native_loader.NativeLoader_Exit()
-        except Exception:
-            pass
-        import time
-        time.sleep(0.5)
+
+        if self._use_proxy:
+            self._stop_proxy()
+        else:
+            self._stop_direct()
+
         print("  Native bridge stopped")
 
+    def _process_native_message(self, msg):
+        """Process a parsed JSON message from the native library.
+
+        Used by both direct-mode callback and proxy-mode reader thread.
+        """
+        with self._lock:
+            self._messages.append(msg)
+            msg_type = msg.get("messageType", "?")
+            msg_str = json.dumps(msg)
+            print(f"  << Native: {msg_type}: {msg_str[:150]}")
+
+            # Track devices from DeviceList and DeviceStateChanged
+            if msg_type == "DeviceList":
+                payload = msg.get("payload", [])
+                if isinstance(payload, list):
+                    for dev in payload:
+                        dev_id = str(dev.get("id", ""))
+                        if dev_id:
+                            self._devices[dev_id] = dev
+            elif msg_type == "DeviceStateChanged":
+                payload = msg.get("payload", {})
+                dev_id = str(payload.get("deviceId", "") or payload.get("id", ""))
+                if dev_id:
+                    self._devices[dev_id] = payload
+
+            # Track battery state
+            elif msg_type == "BatteryState":
+                payload = msg.get("payload", {})
+                dev_id = str(payload.get("deviceId", ""))
+                if dev_id:
+                    self._battery[dev_id] = {
+                        "level": payload.get("batteryLevel", -1),
+                        "charging": payload.get("chargingState", False),
+                        "docked": payload.get("docked", False),
+                    }
+
+            # Track setting values from DeviceSettings responses
+            elif msg_type == "DeviceSettings":
+                payload = msg.get("payload", {})
+                dev_id = str(payload.get("deviceId", ""))
+                for s in payload.get("settings", []):
+                    sid = s.get("id", "")
+                    val = s.get("value", "")
+                    if dev_id and sid:
+                        if dev_id not in self._settings_cache:
+                            self._settings_cache[dev_id] = {}
+                        self._settings_cache[dev_id][sid] = val
+
+            # Track call/mute state
+            elif msg_type == "InCall":
+                payload = msg.get("payload", {})
+                self._in_call = payload.get("inCall", False)
+            elif msg_type == "PrimaryDevice":
+                payload = msg.get("payload", {})
+                self._muted = payload.get("muted", False)
+                self._primary_device = str(payload.get("deviceId", ""))
+
+        self._message_event.set()
+
     def _on_received(self, data):
-        """Callback from native library — receives JSON messages."""
+        """Callback from native library (direct mode) — receives JSON messages."""
         if not data:
             return
         try:
             msg_str = data.decode("utf-8")
             msg = json.loads(msg_str)
-            with self._lock:
-                self._messages.append(msg)
-                msg_type = msg.get("messageType", "?")
-                print(f"  ← Native: {msg_type}: {msg_str[:150]}")
-
-                # Track devices from DeviceList and DeviceStateChanged
-                if msg_type == "DeviceList":
-                    payload = msg.get("payload", [])
-                    if isinstance(payload, list):
-                        for dev in payload:
-                            dev_id = str(dev.get("id", ""))
-                            if dev_id:
-                                self._devices[dev_id] = dev
-                elif msg_type == "DeviceStateChanged":
-                    payload = msg.get("payload", {})
-                    dev_id = str(payload.get("deviceId", "") or payload.get("id", ""))
-                    if dev_id:
-                        self._devices[dev_id] = payload
-
-                # Track battery state
-                elif msg_type == "BatteryState":
-                    payload = msg.get("payload", {})
-                    dev_id = str(payload.get("deviceId", ""))
-                    if dev_id:
-                        self._battery[dev_id] = {
-                            "level": payload.get("batteryLevel", -1),
-                            "charging": payload.get("chargingState", False),
-                            "docked": payload.get("docked", False),
-                        }
-
-                # Track setting values from DeviceSettings responses
-                elif msg_type == "DeviceSettings":
-                    payload = msg.get("payload", {})
-                    dev_id = str(payload.get("deviceId", ""))
-                    for s in payload.get("settings", []):
-                        sid = s.get("id", "")
-                        val = s.get("value", "")
-                        if dev_id and sid:
-                            if dev_id not in self._settings_cache:
-                                self._settings_cache[dev_id] = {}
-                            self._settings_cache[dev_id][sid] = val
-
-                # Track call/mute state
-                elif msg_type == "InCall":
-                    payload = msg.get("payload", {})
-                    self._in_call = payload.get("inCall", False)
-                elif msg_type == "PrimaryDevice":
-                    payload = msg.get("payload", {})
-                    self._muted = payload.get("muted", False)
-                    self._primary_device = str(payload.get("deviceId", ""))
-
-            self._message_event.set()
+            self._process_native_message(msg)
         except Exception as e:
             print(f"  ← Native (decode error): {e}")
 
@@ -269,10 +497,21 @@ class NativeBridge:
         if track_id is None:
             self._track_counter += 1
             track_id = self._track_counter
+
+        if self._use_proxy:
+            self._proxy_send({
+                "cmd": "send",
+                "message_type": message_type,
+                "payload": payload,
+                "track_id": track_id,
+            })
+            print(f"  >> Native: {message_type} (via worker)")
+            return True
+
         msg = {"messageType": message_type, "payload": payload, "trackId": str(track_id)}
         data = json.dumps(msg).encode("utf-8")
-        result = self._native_loader.NativeLoader_SendToNative(data)
-        print(f"  → Native: {message_type} = {'OK' if result else 'FAIL'}")
+        result = self._fn_send(data)
+        print(f"  >> Native: {message_type} = {'OK' if result else 'FAIL'}")
         return result
 
     def recv(self, timeout=2.0):
