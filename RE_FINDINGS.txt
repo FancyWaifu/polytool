@@ -1,7 +1,7 @@
 ================================================================================
 POLYTOOL REVERSE ENGINEERING FINDINGS
 ================================================================================
-Last updated: 2026-03-16
+Last updated: 2026-03-20
 
 All findings from reverse engineering Poly/Plantronics USB headsets.
 Protocols, registers, EEPROM layouts, CVM commands, and settings maps.
@@ -448,9 +448,166 @@ KEY FINDINGS:
   - GUI client name: "Poly Studio Desktop UI"
   - GUI API version: "1.0.0" (not 1.14.1)
 
+ENCRYPTION (optional, from Electron app decompilation):
+  RSA-2048 + AES-256-GCM hybrid encryption
+  Controlled by useEncryption in RegisterClient
+  Only required for sensitive settings: WiFi, Provision Server, passwords, certs
+  Envelope: {data: base64, key: base64, nonce: base64, tag: base64}
+  Our server disables encryption by responding with useEncryption: false
+
+ADDITIONAL MESSAGE TYPES (discovered from app.asar + Messages.dll):
+  Server → Client:
+    DeviceSettingUpdated — notification that a setting changed (triggers re-fetch)
+    DeviceSettingSlewUpdated — gradual slider change notification
+    DfuExecutionStatus — firmware update progress (deviceId, progress, status)
+    AvailableSoftwareUpdate / SoftwareUpdateExecutionStatus — app updates
+    CallsStateUpdated — call active state changes (callInProgress: bool)
+    SoftphonesList / SoftphoneStatus — softphone integrations
+    ReplugDevice — request user to replug device
+    PrepareLogs — request client to prepare log files
+    MtrOnboardingStatus — Teams Room onboarding
+  Client → Server:
+    SlewDeviceSetting — gradual slider changes (settingName, value, rate, active)
+    ScheduleDfuExecution — trigger firmware update (id, deviceId, firmwareFile)
+    PostponeDFU — defer firmware update
+    RemoveDevice — forget a detached device
+    SoftphoneControl — enable/disable softphone (id, enabled)
+    GAnalyticsSent — analytics telemetry (silently ignored)
+    LogsPrepared — response to PrepareLogs with file path
+
+SETTINGS META FIELDS (mandatory for rendering):
+  type — "bool", "enum", "int", "string"
+  visible — whether setting is shown
+  read_only — whether setting is read-only
+  enabled — whether setting is interactive
+  auto_supported — whether auto-mode is available
+  default_value — default value
+  possible_values — array of valid values
+  range_min/range_max/range_step — for numeric sliders
+  compound[] — sub-settings with nested metadata
+
 LENSSERVER (our implementation):
   lensserver.py — drop-in replacement for Poly's LensService
   Writes port file, accepts TCP connections, speaks LensServiceApi
   Discovers devices via HID, fetches images from Poly Cloud
   Live hotplug detection (5s scan interval)
   Poly Studio GUI connects and shows devices with product images
+  Handles 20 message types including SlewDeviceSetting and RemoveDevice
+
+
+================================================================================
+8. DEVICESETTINGS.ZIP — CANONICAL SETTINGS DATABASE
+================================================================================
+
+Source: C:\Program Files\Poly\Poly Studio\LegacyHost\DeviceSettings.zip
+Format: 229 JSON files, one per device PID
+Coverage: 217 unique PIDs, 169 unique globalSettingIDs
+
+FILE STRUCTURE (per PID):
+  {
+    "pid": "0xAC27",
+    "settings": [{
+      "settingName": "audioSensing",
+      "globalSettingID": "0xA00",
+      "messaging": "hid",      // or "deckard", "video"
+      "defaultValue": "0",
+      "get": {
+        "hidMetadata": { "usage": "0xE0", "usagePage": "0xFFA2", ... },
+        "possibleValues": [{"name": "false", "value": 0}, {"name": "true", "value": 1}]
+      },
+      "set": {
+        "hidMetadata": { "usage": "0xE0", "usagePage": "0xFFA2", ... },
+        "possibleValues": [{"name": "false", "value": 2}, {"name": "true", "value": 1}]
+      }
+    }]
+  }
+
+CRITICAL: GET AND SET VALUE ENCODINGS DIFFER
+  For DECT HID booleans: read uses 0/1 but write uses 2/1 (where 2=false, 1=true)
+  This applies to: audioSensing, lyncDialTone, answeringCall, enableOLI,
+  intellistand, otaSubscription, bluetoothEnabled, volumeLevelTone,
+  volumeControlOrientation, and others on usagePage 0xFFA2
+
+MESSAGING TYPES:
+  hid — direct USB HID feature/output reports (DECT bases, some legacy)
+  deckard — BladeRunner/Deckard protocol via native bridge (BT headsets, modern USB)
+  video / rangedvideo — camera controls (out of scope for audio)
+
+SETTING NAME CORRECTIONS (found by comparing zip to hardcoded):
+  0x90a: was "Smart Audio Transfer" → actually "restoreDefaults" (Restore Defaults)
+  0xb05: was "Caller ID" → actually "callAnnouncement" (Call Announcement / Tone Control)
+  0x60c: was "Active Call Audio" → actually "scoTone" (Active Audio Tone, a bool)
+  0x802: value "moderate" → actually "aimoderate" (AI Moderate)
+  0x700: was missing "narrowBand" choice
+
+DEVICE CATEGORIES IN ZIP:
+  HID-only: 34 devices (legacy DECT bases using FFA2 feature/output reports)
+  Deckard-only: 134 devices (BT/USB headsets using Deckard protocol)
+  Video: 15 devices (cameras — excluded from polytool)
+  Mixed HID+Deckard: 14 devices
+  DECT-HID: 32 devices (DECT bases with settings at FFA2 usage page)
+
+
+================================================================================
+9. DFU.CONFIG — FIRMWARE UPDATE RULES (347 DEVICES, 22 EXECUTORS)
+================================================================================
+
+Source: C:\Program Files\Poly\Poly Studio\LegacyHost\Components\DFUManager\dfu.config
+Format: JSON with "devices" array
+
+22 UNIQUE DFU EXECUTOR TYPES:
+  ConexantDFU (51) — CX2070x EEPROM flash (all Blackwire C3xx/C5xx/3220)
+  TIDFU (141) — TI chipset BladeRunner (BW 33xx/7225/8225, EncorePro, DA adapters)
+  NeoDFU (96) — BladeRunner FTP BT+USB (Sync, Voyager 4320+, Falcon, Flamingo)
+  FwuApiDFU (161) — FWU API over HID (all Savi/DECT bases + headsets)
+  CsrHidDfu (119) — CSR HID DFU (BT600/700/900 dongles, Voyager 5200/3200)
+  MorpheusDFU (48) — Voyager BT headset OTA firmware
+  BTDeviceDFU (96) — classic BT DFU (M1100, Voyager Pro, legacy)
+  BC05DFU (22) — DECT base BT radio firmware
+  DSPTuningDFU (23) — DA70/80/90 DSP tuning data
+  PnxDFU (30) — Pacifico 40 NXP conference phones
+  USBDFU (12) — USB DFU class (Studio cameras, Voyager Legend)
+  RomeDFU (8) — MDA400 + charge cases
+  HPDFU (3) — HP webcams
+  SetID (124) — device identity/pairing (not real firmware)
+  + 8 more (Latte, Capri, Cinnamon variants, Antman, FwuTuning)
+
+PID MISMATCHES FOUND:
+  C053/C054 (Blackwire 5xx): polytool had HidTiDfu → actually ConexantDFU
+
+MULTI-COMPONENT UPDATES:
+  DECT devices need up to 7 firmware components: Base + Headset + BC05 +
+  PIC + Tuning + Language + SetID, each using a different executor.
+
+PARENT-CHILD DFU:
+  W8210T/W8220T headsets can only be updated through parent base station.
+
+
+================================================================================
+10. POLY STUDIO ARCHITECTURE (from installed v5.0.1.9)
+================================================================================
+
+ARCHITECTURE:
+  Poly Studio GUI (Electron 38.2.0 / React 19 / Vite)
+       ↓ TCP:50577 (LensServiceApi, SOH-delimited JSON)
+  Lens Control Service (.NET 8.0, DotNetty)
+       ├─ clockwork/ (10 PolyBus device driver DLLs, ~52MB)
+       ├─ eDfu/ (13 firmware updater executables, ~39MB)
+       └─ DataModel/DeviceSetting.json
+       ↓
+  LegacyHost (C++ native, NativeLoader.dll + PLTDeviceManager.dll)
+       ├─ Config/ (Devices.config, Hub.config, UCClients.config)
+       ├─ Components/DFUManager/dfu.config (347 devices)
+       ├─ DeviceSettings.zip (229 per-device settings files)
+       └─ Plugins/ (7 UC integration DLLs: Teams, Zoom, Webex, Jabber, Avaya)
+       ↓
+  USB HID Devices
+
+TWO PARALLEL DEVICE DRIVER SYSTEMS:
+  LegacyHost (C++ DLLs via native bridge) — older, for DECT/Voyager call control
+  PolyBus/Clockwork (.NET-hosted native DLLs) — newer, for device enumeration
+
+CLOUD ENDPOINTS:
+  Production: api.silica-prod01.io.lens.poly.com/graphql
+  Auth: login.lens.poly.com (Auth0 client: eeR97uW60MAHOm5l3e5b4nj07nHQGJtd)
+  IoT Hub: Azure IoT Hub via DPS (global.azure-devices-provisioning.net)

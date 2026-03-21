@@ -13,6 +13,11 @@ the Poly Studio GUI metadata format.
 import json
 from pathlib import Path
 
+# When True, use official Poly settings profiles from DeviceSettings.zip.
+# When False, prefer reverse-engineered hardcoded profiles (may expose
+# additional settings like sidetone on BW 3220 that Poly doesn't surface).
+PREFER_OFFICIAL_SETTINGS = True
+
 # Load Poly's settings value database
 _data_dir = Path(__file__).parent / "data"
 _poly_settings = {}
@@ -47,12 +52,14 @@ def _choice_default(name, display_default):
 DECT_SETTINGS = [
     # ── General ──
     {"name": "Answering Call", "type": "bool", "default": False},
-    {"name": "Active Call Audio", "type": "bool", "default": False},
+    {"name": "Active Audio Tone", "type": "bool", "default": False},
     {"name": "Auto-Answer", "type": "bool", "default": False},
     {"name": "Online Indicator", "type": "bool", "default": False},
-    {"name": "Smart Audio Transfer", "type": "bool", "default": False},
     {"name": "Default Line Type", "type": "enum", "choices": _choices("Default Line Type") or ["pstn", "voip", "mobile"], "default": _choice_default("Default Line Type", "Computer")},
     {"name": "Second Incoming Call", "type": "enum", "choices": _choices("Second Incoming Call") or ["ignore", "once", "continuous"], "default": _choice_default("Second Incoming Call", "Ignore")},
+    {"name": "Bluetooth Enabled", "type": "bool", "default": True},
+    {"name": "Mobile Voice Commands", "type": "bool", "default": False},
+    {"name": "Volume Control Orientation", "type": "enum", "choices": _choices("Wearing preference for volume control") or ["leftRight", "leftRightSwapped"], "default": "leftRight"},
     # ── Ringtones & Volume ──
     {"name": "Sidetone", "type": "enum", "choices": _choices("Sidetone") or ["low", "medium", "high"], "default": _choice_default("Sidetone", "Medium")},
     {"name": "Base Ringer Volume", "type": "enum", "choices": _choices("Base Ringer Volume") or ["off", "low", "medium", "high"], "default": _choice_default("Base Ringer Volume", "Medium")},
@@ -60,25 +67,32 @@ DECT_SETTINGS = [
     {"name": "Desk Phone Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
     {"name": "Desk Phone", "type": "enum", "choices": _choices("Desk Phone") or ["sound1", "sound2", "sound3", "off"], "default": _choice_default("Desk Phone", "Sound 1")},
     {"name": "VoIP Interface Ringtone", "type": "enum", "choices": ["sound1", "sound2", "sound3"], "default": "sound1"},
+    {"name": "Mobile Interface Ringtone", "type": "enum", "choices": ["sound1", "sound2", "sound3"], "default": "sound1"},
     {"name": "Volume Level Tones", "type": "enum", "choices": _choices("Volume Level Tones") or ["atEveryLevel", "minMaxOnly"], "default": _choice_default("Volume Level Tones", "At Every Level")},
     {"name": "Mute On/Off Alerts", "type": "enum", "choices": ["singleTone", "doubleTone", "voice"], "default": "voice"},
+    {"name": "Mute Tone Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
     {"name": "System Tone Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
     {"name": "Mute Reminder Time", "type": "enum", "choices": ["off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"], "default": "15"},
     # ── Wireless ──
-    {"name": "DECT Density", "type": "enum", "choices": _choices("DECT Density") or ["homeMode", "enterpriseMode", "mono"], "default": _choice_default("DECT Density", "Conversation")},
+    {"name": "DECT Density", "type": "enum", "choices": _choices("DECT Density") or ["homeMode", "enterpriseMode", "mono", "narrowBand"], "default": _choice_default("DECT Density", "Conversation")},
     {"name": "OTA Subscription", "type": "bool", "default": True},
     {"name": "Power Level", "type": "enum", "choices": _choices("Power Level") or ["low", "medium", "high"], "default": _choice_default("Power Level", "High")},
     {"name": "Keep Link Up", "type": "enum", "choices": _choices("Keep Link Up") or ["activeonlyduringcall", "alwaysactive"], "default": _choice_default("Keep Link Up", "Active Only During Call")},
+    {"name": "Audio Bandwidth VoIP", "type": "enum", "choices": _choices("Audio Bandwidth VoIP") or ["narrowband", "wideband"], "default": "wideband"},
+    {"name": "Audio Bandwidth PSTN", "type": "enum", "choices": _choices("Audio Bandwidth PSTN") or ["narrowband", "wideband"], "default": "wideband"},
     # ── Sensors & Presence ──
     {"name": "Wearing Sensor", "type": "bool", "default": False},
     {"name": "Enable Audio Sensing", "type": "bool", "default": False},
     {"name": "Dialtone On/Off", "type": "bool", "default": True},
+    {"name": "Auto Connect To Mobile", "type": "bool", "default": True},
     # ── Advanced / Audio ──
     {"name": "Anti-Startle", "type": "bool", "default": False},
     {"name": "Anti Startle 2", "type": "bool", "default": True},
     {"name": "Noise Exposure", "type": "enum", "choices": _choices("Noise Exposure") or ["off", "85db", "80db"], "default": _choice_default("Noise Exposure", "No Limiting")},
     {"name": "Hours on Phone Per Day", "type": "enum", "choices": _choices("Hours on Phone Per Day") or ["2", "4", "6", "8", "off"], "default": _choice_default("Hours on Phone Per Day", "Off")},
-    {"name": "Multiband Expander", "type": "enum", "choices": ["no", "moderate", "agressive"], "default": "moderate"},
+    {"name": "Multiband Expander", "type": "enum", "choices": ["no", "aimoderate", "agressive"], "default": "aimoderate"},
+    # ── Reset ──
+    {"name": "Restore Defaults", "type": "bool", "default": False},
     # ── Language ──
     {"name": "Language Selection", "type": "enum", "choices": ["en", "fr", "de", "es", "it", "pt", "nl", "sv", "no", "da", "fi", "ja", "ko", "zh", "yue", "ru"], "default": "en"},
 ]
@@ -96,42 +110,70 @@ BLADERUNNER_SETTINGS = [
     # Settings via BladeRunner GET_SETTING/SET_SETTING HID protocol
     # ── Ringtones & Volume ──
     {"name": "Sidetone", "type": "enum", "choices": _choices("Sidetone") or ["low", "medium", "high"], "default": _choice_default("Sidetone", "Medium")},
+    {"name": "Equalizer", "type": "enum", "choices": ["bass", "flat", "bright"], "default": "flat"},
     {"name": "Volume Level Tones", "type": "enum", "choices": _choices("Volume Level Tones") or ["atEveryLevel", "minMaxOnly"], "default": _choice_default("Volume Level Tones", "At Every Level")},
     {"name": "Mute On/Off Alerts", "type": "enum", "choices": _choices("Mute On/Off Alerts") or ["voice", "singleTone", "doubleTone"], "default": _choice_default("Mute On/Off Alerts", "Voice")},
+    {"name": "Mute Off Alert", "type": "enum", "choices": _choices("Mute Reminder") or ["off", "timed", "voiceAudible", "voiceVisible", "voiceVisibleAndAudible"], "default": "voiceAudible"},
+    {"name": "Mute Reminder Time", "type": "enum", "choices": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"], "default": "15"},
     # ── General ──
     {"name": "Online Indicator", "type": "bool", "default": True},
     {"name": "Auto-Answer", "type": "bool", "default": False},
     {"name": "Wearing Sensor", "type": "bool", "default": False},
     {"name": "Notification Tones", "type": "bool", "default": True},
+    {"name": "Independent Volume Control", "type": "bool", "default": False},
+    {"name": "Hold Reminder", "type": "bool", "default": True},
     {"name": "Second Incoming Call", "type": "enum", "choices": _choices("Second Incoming Call") or ["ignore", "once", "continuous"], "default": _choice_default("Second Incoming Call", "Ignore")},
     # ── Advanced ──
     {"name": "Anti Startle 2", "type": "enum", "choices": _choices("Anti Startle 2") or ["off", "standard", "enhanced"], "default": _choice_default("Anti Startle 2", "Standard")},
     {"name": "Noise Exposure", "type": "enum", "choices": _choices("Noise Exposure") or ["off", "85db", "80db"], "default": _choice_default("Noise Exposure", "No Limiting")},
     {"name": "Hours on Phone Per Day", "type": "enum", "choices": _choices("Hours on Phone Per Day") or ["2", "4", "6", "8", "off"], "default": _choice_default("Hours on Phone Per Day", "Off")},
+    # ── Reset ──
+    {"name": "Restore Defaults", "type": "bool", "default": False},
 ]
 
 VOYAGER_BT_SETTINGS = [
     # ── General ──
     {"name": "Answering Call", "type": "bool", "default": True},
+    {"name": "Answer/Ignore", "type": "bool", "default": False},
     {"name": "Auto-Answer", "type": "bool", "default": False},
+    {"name": "Auto-Pause Music", "type": "bool", "default": True},
+    {"name": "Active Call Audio", "type": "enum", "choices": _choices("Active Call Audio") or ["doNothing", "transferAudioToMobile", "muteMic"], "default": "doNothing"},
+    {"name": "Smart Audio Transfer", "type": "bool", "default": False},
     {"name": "Second Incoming Call", "type": "enum", "choices": ["ignore", "once", "continuous"], "default": "once"},
     {"name": "Ringtone", "type": "bool", "default": True},
     {"name": "Online Indicator", "type": "bool", "default": True},
-    {"name": "Smart Audio Transfer", "type": "bool", "default": True},
     {"name": "Notification Tones", "type": "bool", "default": False},
     {"name": "Mute On/Off Alerts", "type": "enum", "choices": ["voice", "singleTone", "doubleTone"], "default": "voice"},
-    {"name": "Mute Off Alert", "type": "enum", "choices": ["off", "timed", "voiceAudible", "voiceVisible", "voiceVisibleAndAudible"], "default": "voiceAudible"},
+    {"name": "Mute Off Alert", "type": "enum", "choices": _choices("Mute Reminder") or ["off", "timed", "voiceAudible", "voiceVisible", "voiceVisibleAndAudible"], "default": "voiceAudible"},
     {"name": "Mute Reminder Time", "type": "enum", "choices": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"], "default": "15"},
     # ── Ringtones & Volume ──
     {"name": "Sidetone", "type": "enum", "choices": ["low", "medium", "high"], "default": "medium"},
+    {"name": "Equalizer", "type": "enum", "choices": ["bass", "flat", "bright"], "default": "flat"},
     {"name": "Volume Level Tones", "type": "enum", "choices": ["atEveryLevel", "minMaxOnly"], "default": "minMaxOnly"},
-    {"name": "Active Call Audio", "type": "bool", "default": True},
+    {"name": "Active Audio Tone", "type": "bool", "default": True},
+    {"name": "Independent Volume Control", "type": "bool", "default": False},
+    {"name": "Mobile Interface Ringtone", "type": "enum", "choices": ["sound1", "sound2", "sound3"], "default": "sound1"},
     # ── Wireless ──
     {"name": "Audio Bandwidth VoIP", "type": "enum", "choices": ["narrowband", "wideband"], "default": "wideband"},
+    {"name": "A2DP Mode On/Off", "type": "bool", "default": True},
+    {"name": "Caller ID", "type": "bool", "default": True},
+    {"name": "Wearing Sensor", "type": "bool", "default": True},
+    # ── ANC ──
+    {"name": "ANC Mode", "type": "enum", "choices": _choices("ANC Mode") or ["adaptive", "standard", "off"], "default": "adaptive"},
+    {"name": "Transparency Mode", "type": "enum", "choices": _choices("Transparency Mode") or ["speech", "environment", "off"], "default": "off"},
+    # ── Buttons ──
+    {"name": "Custom Button", "type": "enum", "choices": _choices("Custom Button") or ["playPause", "vpa", "holdResume", "anc", "nothing", "microsoftTeams"], "default": "playPause"},
+    {"name": "Hold Reminder", "type": "bool", "default": True},
+    {"name": "Clear Trusted Device List", "type": "bool", "default": False},
     # ── Advanced / Audio ──
     {"name": "Anti Startle 2", "type": "bool", "default": False},
     {"name": "Noise Exposure", "type": "enum", "choices": ["off", "85db", "80db"], "default": "off"},
     {"name": "Hours on Phone Per Day", "type": "enum", "choices": ["2", "4", "6", "8"], "default": "8"},
+    # ── Misc ──
+    {"name": "Tone Control", "type": "bool", "default": True},
+    {"name": "Volume Min/Max Alerts", "type": "enum", "choices": _choices("Volume Min/Max Alerts") or ["tone", "voice"], "default": "voice"},
+    {"name": "Manage All", "type": "bool", "default": False},
+    {"name": "Quick Disconnect", "type": "enum", "choices": _choices("Quick Disconnect") or ["doNothing", "placeCallOnHold", "lockComputerScreen", "lockScreenAndPlaceCallOnHold"], "default": "doNothing"},
     # ── Reset ──
     {"name": "Restore Defaults", "type": "bool", "default": False},
 ]
@@ -179,9 +221,25 @@ def get_device_family(usage_page, dfu_executor="", pid=0):
 
 
 def get_settings_for_device(usage_page, dfu_executor="", pid=0):
-    """Get the settings profile for a device."""
+    """Get the settings profile for a device.
+
+    When PREFER_OFFICIAL_SETTINGS is True, uses the canonical PID-specific
+    profile from DeviceSettings.zip when available. When False, uses hardcoded
+    profiles which may include reverse-engineered settings Poly doesn't expose.
+    """
     family = get_device_family(usage_page, dfu_executor, pid=pid)
-    return DEVICE_PROFILES.get(family, DECT_SETTINGS)
+    hardcoded = DEVICE_PROFILES.get(family, DECT_SETTINGS)
+
+    if PREFER_OFFICIAL_SETTINGS and pid:
+        try:
+            from device_settings_db import get_pid_profile
+            pid_profile = get_pid_profile(pid)
+            if pid_profile:
+                return pid_profile
+        except ImportError:
+            pass
+
+    return hardcoded
 
 
 def settings_to_api_format(settings_defs, current_values=None, family=None,

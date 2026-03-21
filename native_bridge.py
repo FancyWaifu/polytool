@@ -610,30 +610,56 @@ ALL_SETTING_DEFS = {
     "0x607": {"name": "Mute On/Off Alerts", "type": "enum", "choices": ["singleTone", "doubleTone", "voice"], "default": "voice"},
     "0x608": {"name": "System Tone Volume", "type": "enum", "choices": ["off", "low", "standard"], "default": "standard"},
     "0x609": {"name": "Volume Level Tones", "type": "enum", "choices": ["atEveryLevel", "minMaxOnly"], "default": "atEveryLevel"},
-    "0x60c": {"name": "Active Call Audio", "type": "bool", "default": False},
+    "0x60c": {"name": "Active Audio Tone", "type": "bool", "default": False},
     "0x60d": {"name": "Mute Off Alert", "type": "enum", "choices": ["off", "timed", "voiceAudible", "voiceVisible", "voiceVisibleAndAudible"], "default": "voiceAudible"},
-    "0x700": {"name": "DECT Density", "type": "enum", "choices": ["homeMode", "enterpriseMode", "mono"], "default": "mono"},
+    "0x700": {"name": "DECT Density", "type": "enum", "choices": ["homeMode", "enterpriseMode", "mono", "narrowBand"], "default": "mono"},
     "0x701": {"name": "OTA Subscription", "type": "bool", "default": True},
     "0x702": {"name": "Power Level", "type": "enum", "choices": ["low", "medium", "high"], "default": "medium"},
     "0x708": {"name": "Audio Bandwidth VoIP", "type": "enum", "choices": ["narrowband", "wideband"], "default": "wideband"},
-    "0x802": {"name": "Multiband Expander", "type": "enum", "choices": ["no", "moderate", "agressive"], "default": "moderate"},
+    "0x802": {"name": "Multiband Expander", "type": "enum", "choices": ["no", "aimoderate", "agressive"], "default": "aimoderate"},
     "0x803": {"name": "Sidetone", "type": "enum", "choices": ["low", "medium", "high"], "default": "medium"},
     "0x805": {"name": "Notification Tones", "type": "bool", "default": False},
     "0x902": {"name": "Online Indicator", "type": "bool", "default": True},
-    "0x90a": {"name": "Smart Audio Transfer", "type": "bool", "default": True},
+    "0x90a": {"name": "Restore Defaults", "type": "bool", "default": False},
     "0xa00": {"name": "Enable Audio Sensing", "type": "bool", "default": False},
     "0xa01": {"name": "Dialtone On/Off", "type": "bool", "default": True},
-    "0xb05": {"name": "Caller ID", "type": "bool", "default": True},
-    "0xb06": {"name": "Tone Control", "type": "enum", "choices": ["tone", "voice"], "default": "voice"},
+    "0xb05": {"name": "Tone Control", "type": "bool", "default": True},
+    "0xb06": {"name": "Volume Min/Max Alerts", "type": "enum", "choices": ["tone", "voice"], "default": "voice"},
     "0xfff4": {"name": "Keep Link Up", "type": "enum", "choices": ["activeonlyduringcall", "alwaysactive"], "default": "activeonlyduringcall"},
 }
+
+# ── Merge with canonical DeviceSettings.zip database ──────────────────────────
+# The zip contains per-device settings with exact HID metadata. We merge its
+# unified settings map into ALL_SETTING_DEFS so any setting the zip knows about
+# is available for dynamic profile building, while keeping hardcoded entries as
+# fallbacks for settings not in the zip.
+
+try:
+    from device_settings_db import SETTINGS_DB as _ZIP_DB
+    # Zip entries override hardcoded (they're canonical), then fill gaps
+    _merged = {}
+    for gid, entry in _ZIP_DB.items():
+        _merged[gid] = {
+            "name": entry["name"],
+            "type": entry["type"],
+            "default": entry.get("default"),
+        }
+        if "choices" in entry:
+            _merged[gid]["choices"] = entry["choices"]
+    # Add hardcoded entries not in the zip (fallback)
+    for gid, entry in ALL_SETTING_DEFS.items():
+        if gid not in _merged:
+            _merged[gid] = entry
+    ALL_SETTING_DEFS = _merged
+except ImportError:
+    pass
 
 # Build reverse maps: name → hex_id, hex_id → name
 _NAME_TO_ID = {v["name"]: k for k, v in ALL_SETTING_DEFS.items()}
 _ID_TO_NAME = {k: v["name"] for k, v in ALL_SETTING_DEFS.items()}
 # Legacy aliases
 _NAME_TO_ID["Wearing Sensor"] = "0xa00"
-_NAME_TO_ID["Restore Defaults"] = "0x90a"
+_NAME_TO_ID["Smart Audio Transfer"] = "0x202"  # Was wrongly at 0x90a
 
 
 def setting_name_to_id(name):

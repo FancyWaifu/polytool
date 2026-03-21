@@ -192,9 +192,11 @@ DFU_EXECUTOR_MAP = {
     "dbf": "btNeoDfu", "5c5": "btNeoDfu", "2c0": "btNeoDfu",
     "17d": "btNeoDfu", "17e": "btNeoDfu", "d00a": "btNeoDfu",
     # HidTiDfu - USB headsets (TI chipset, BladeRunner over HID)
-    "4317": "HidTiDfu", "4315": "HidTiDfu", "c053": "HidTiDfu",
-    "c054": "HidTiDfu", "430b": "HidTiDfu", "430d": "HidTiDfu",
+    "4317": "HidTiDfu", "4315": "HidTiDfu",
+    "430b": "HidTiDfu", "430d": "HidTiDfu",
     "430a": "HidTiDfu", "430c": "HidTiDfu",
+    # CxEepromDfu - Blackwire 5xx (CX2070x EEPROM, same protocol as BW3220)
+    "c053": "CxEepromDfu", "c054": "CxEepromDfu",
     # EncorePro USB series (same TI chipset)
     "430e": "HidTiDfu", "430f": "HidTiDfu",  # EncorePro 320/310 USB
     "431d": "HidTiDfu", "431e": "HidTiDfu", "431f": "HidTiDfu",  # EncorePro 515/525/545

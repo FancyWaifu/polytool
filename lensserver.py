@@ -307,6 +307,13 @@ class LensServer:
             "GetPrimaryDevice": self.on_get_primary_device,
             "RegisterSoftphones": self.on_register_softphones,
             "GetAvailableSoftwareUpdate": self.on_get_software_update,
+            "SlewDeviceSetting": self.on_slew_device_setting,
+            "ScheduleDfuExecution": self.on_schedule_dfu,
+            "PostponeDFU": self.on_postpone_dfu,
+            "RemoveDevice": self.on_remove_device,
+            "SoftphoneControl": self.on_softphone_control,
+            "LogsPrepared": self.on_logs_prepared,
+            "GAnalyticsSent": self.on_analytics,
         }
 
         handler = handlers.get(msg_type)
@@ -558,11 +565,15 @@ class LensServer:
         pid = ptd.get("pid", 0)
         family = get_device_family(usage_page, dfu_executor, pid=pid)
 
-        # Use whichever profile has more settings: dynamic (from native bridge)
-        # or hardcoded (from lens_settings.py)
+        # Pick settings profile: dynamic (from native bridge) vs static (from
+        # lens_settings, which itself checks PREFER_OFFICIAL_SETTINGS)
+        from lens_settings import PREFER_OFFICIAL_SETTINGS
         hardcoded_defs = get_settings_for_device(usage_page, dfu_executor, pid=pid)
         dynamic_defs = self._dynamic_profiles.get(device_id, [])
-        settings_defs = dynamic_defs if len(dynamic_defs) > len(hardcoded_defs) else hardcoded_defs
+        if PREFER_OFFICIAL_SETTINGS:
+            settings_defs = dynamic_defs if dynamic_defs else hardcoded_defs
+        else:
+            settings_defs = dynamic_defs if len(dynamic_defs) > len(hardcoded_defs) else hardcoded_defs
 
         current_values = self._device_settings_cache.get(device_id, {})
 
@@ -719,6 +730,87 @@ class LensServer:
             "canPostpone": False,
             "component": msg.get("component", ""),
         }
+
+    def on_slew_device_setting(self, msg, client_sock):
+        """Handle SlewDeviceSetting — gradual setting change (sliders)."""
+        device_id = msg.get("deviceId", "")
+        name = msg.get("settingName", msg.get("name", ""))
+        value = msg.get("value")
+        active = msg.get("active", True)
+
+        if active and value is not None:
+            # Update cache with current slider value
+            if device_id not in self._device_settings_cache:
+                self._device_settings_cache[device_id] = {}
+            self._device_settings_cache[device_id][name] = value
+
+            # Try writing to device
+            self.write_device_setting(device_id, name, value)
+            _log(f"  Slew {name} = {value} (active={active})", verbose_only=True)
+
+        # Notify clients of the slew update
+        self.broadcast({
+            "type": "DeviceSettingSlewUpdated",
+            "apiVersion": API_VERSION,
+            "deviceId": device_id,
+            "settingName": name,
+            "value": value,
+            "active": active,
+        })
+        return None  # already broadcast
+
+    def on_schedule_dfu(self, msg, client_sock):
+        """Handle ScheduleDfuExecution — firmware update request."""
+        device_id = msg.get("deviceId", "")
+        _log(f"  DFU scheduled for {device_id} (not implemented)")
+        return {
+            "type": "DfuExecutionStatus",
+            "apiVersion": API_VERSION,
+            "deviceId": device_id,
+            "dfuRequestId": msg.get("id", ""),
+            "status": "NotSupported",
+            "progress": 0,
+        }
+
+    def on_postpone_dfu(self, msg, client_sock):
+        """Handle PostponeDFU — defer firmware update."""
+        _log(f"  DFU postponed for {msg.get('deviceId', '')}", verbose_only=True)
+        return None
+
+    def on_remove_device(self, msg, client_sock):
+        """Handle RemoveDevice — forget a detached device."""
+        device_id = msg.get("deviceId", "")
+        if device_id in self.devices:
+            dev = self.devices.pop(device_id)
+            self._device_settings_cache.pop(device_id, None)
+            self._dynamic_profiles.pop(device_id, None)
+            _log(f"  Removed device: {dev.get('productName', device_id)}")
+            self.broadcast({
+                "type": "DeviceDetached",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+            })
+        return None
+
+    def on_softphone_control(self, msg, client_sock):
+        """Handle SoftphoneControl — enable/disable a softphone."""
+        _log(f"  Softphone control: id={msg.get('id')} enabled={msg.get('enabled')}", verbose_only=True)
+        return {
+            "type": "SoftphoneStatus",
+            "apiVersion": API_VERSION,
+            "id": msg.get("id", ""),
+            "enabled": msg.get("enabled", True),
+            "connected": False,
+        }
+
+    def on_logs_prepared(self, msg, client_sock):
+        """Handle LogsPrepared — client responding to PrepareLogs request."""
+        _log(f"  Logs prepared: {msg.get('filePath', '')}", verbose_only=True)
+        return None
+
+    def on_analytics(self, msg, client_sock):
+        """Handle GAnalyticsSent — analytics telemetry (ignored)."""
+        return None
 
     # ── Device I/O (delegated to our HID code) ───────────────────────
 
@@ -999,10 +1091,17 @@ class LensServer:
                 self._dynamic_profiles[did] = profile
 
             # Populate settings cache with actual values
+            # Translate HID-level values to UI-level values where needed
+            try:
+                from device_settings_db import translate_value
+            except ImportError:
+                translate_value = lambda hex_id, val: val
+
             cache = {}
             for hex_id, val in native_values.items():
                 setting_name = setting_id_to_name(hex_id)
                 if setting_name:
+                    val = translate_value(hex_id, val)
                     if val == "true":
                         val = True
                     elif val == "false":
@@ -1010,7 +1109,10 @@ class LensServer:
                     cache[setting_name] = val
 
             if cache:
-                self._device_settings_cache[did] = cache
+                # Merge with existing cache (USB HID reads) rather than replacing
+                existing = self._device_settings_cache.get(did, {})
+                existing.update(cache)
+                self._device_settings_cache[did] = existing
                 _log(f"  Read {len(cache)} settings from native bridge for {dev.get('productName', did)}")
 
     def read_device_settings(self, device_id):
@@ -1214,7 +1316,7 @@ def main():
 
     # Print startup banner
     print(f"\n  PolyTool LensServer v1.0")
-    print(f"  {'═' * 30}")
+    print(f"  {'=' * 30}")
     print(f"  Devices: {len(server.devices)}")
     for did, dev in server.devices.items():
         conn = "BT" if dev.get("connectionType") == "Bluetooth" else "USB"

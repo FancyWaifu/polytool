@@ -6,7 +6,7 @@ Open-source toolkit for managing Poly/Plantronics USB headsets. Drop-in replacem
 
 - **LensServer** — Drop-in Poly Lens Control Service replacement. Poly Studio GUI connects to it and displays your devices with full settings controls, product images, battery status, and firmware info — no official Poly software required.
 - **Native Bridge** — Direct ctypes interface to Poly's native libraries. Discovers USB and Bluetooth devices, reads/writes all settings on any Poly headset including DECT and Voyager series. No legacyhost or Clockwork needed.
-- **Dynamic Settings** — Automatically detects what settings each headset supports and builds a matching profile. 34 known setting IDs across all device families. Plug in any Poly headset and its settings just work.
+- **Dynamic Settings** — Automatically detects what settings each headset supports and builds a matching profile. 72 known setting IDs across all device families with canonical per-device profiles for 217 devices loaded from Poly's own DeviceSettings.zip. Plug in any Poly headset and its settings just work.
 - **Web Dashboard** — Lightweight Flask app for device management, firmware updates, and settings at `localhost:8420`
 - **Firmware Flashing** — Download from Poly Cloud CDN and flash directly over USB HID with identity preservation
 - **Fleet Management** — Central PostgreSQL server with agent-based reporting, policy enforcement, and compliance monitoring
@@ -30,16 +30,17 @@ python3 lensserver.py --verbose
 
 | Device | Flash | Settings | Protocol |
 |--------|-------|----------|----------|
-| Blackwire 3220 | Yes | Sidetone | CX2070x EEPROM |
-| Blackwire 3310/3315/3320/3325 | Yes | Full (13 settings) | BladeRunner HID |
-| Blackwire 7225/8225 | Yes | Full (13 settings) | BladeRunner HID |
-| Savi 7310/7320/7410/7420 | Yes | Full (30 settings) | Native Bridge / DECT |
-| Savi 8200/8210/8220/8410/8420 | Yes | Full (30 settings) | Native Bridge / DECT |
-| Voyager 4320 Series | Untested | Full (18 settings) | Native Bridge / BT |
+| Blackwire 3220 | Yes | Dialtone | CX2070x EEPROM |
+| Blackwire 5xx | Yes | Dialtone | CX2070x EEPROM |
+| Blackwire 3310/3315/3320/3325 | Yes | Full (17 settings) | BladeRunner HID |
+| Blackwire 7225/8225 | Yes | Full (17 settings) | BladeRunner HID |
+| Savi 7310/7320/7410/7420 | Yes | Full (38 settings) | Native Bridge / DECT |
+| Savi 8200/8210/8220/8410/8420 | Yes | Full (38 settings) | Native Bridge / DECT |
+| Voyager 4320/Focus 2/Free 60 | Untested | Full (36 settings) | Native Bridge / BT |
 | Voyager Base-M CD | — | Full (6 settings) | Native Bridge / BT |
-| Sync 20 | Yes | — | BladeRunner HID |
-| EncorePro 310/320/515/525/545 | Yes | Full | BladeRunner HID |
-| Any other Poly headset | — | Auto-detected | Native Bridge |
+| Sync 20/40/60 | Yes | Full (17 settings) | BladeRunner HID |
+| EncorePro 310/320/515/525/545 | Yes | Full (17 settings) | BladeRunner HID |
+| Any other Poly headset | — | Auto-detected (217 PIDs) | Native Bridge |
 
 Settings for any Poly headset are auto-detected via the native bridge — no manual profiles needed.
 
@@ -54,6 +55,7 @@ Settings for any Poly headset are auto-detected via the native bridge — no man
 | `polytool.py` | CLI for scan, info, battery, updates, flash, catalog |
 | `menu.py` | Interactive terminal menu with device, firmware, and debug submenus |
 | `lens_settings.py` | Settings profiles and API format conversion |
+| `device_settings_db.py` | Canonical settings database from DeviceSettings.zip (217 devices, 72 settings) |
 | `device_settings.py` | Direct HID settings read/write with Poly Studio name translation |
 | `polyserver.py` | Fleet management server (PostgreSQL) |
 | `polyagent.py` | Workstation agent for fleet reporting |
@@ -103,7 +105,7 @@ python3 native_bridge.py --set 0x10a medium  # Set Base Ringer Volume
 python3 native_bridge.py --get        # Query all settings
 ```
 
-**34 known setting IDs** covering: sidetone, noise exposure, DECT density, power level, auto-answer, mute alerts, ringtones, volume controls, wearing sensor, online indicator, call announcement, audio bandwidth, anti-startle, and more.
+**72 known setting IDs** covering: sidetone, noise exposure, DECT density, power level, auto-answer, mute alerts, ringtones, volume controls, wearing sensor, online indicator, ANC mode, transparency mode, equalizer, custom button, caller ID, A2DP, quick disconnect, audio bandwidth, anti-startle, and more. Canonical per-device profiles for 217 devices loaded from Poly's DeviceSettings.zip.
 
 **Supports:** Any device that Poly's native library can communicate with — DECT base stations, Bluetooth headsets paired through USB docks, and USB-connected devices.
 
@@ -255,6 +257,7 @@ polytool/
 ├── lensapi.py               # LensServiceApi TCP client
 ├── native_bridge.py         # Direct ctypes interface to Poly native libs
 ├── lens_settings.py         # Settings profiles and API format conversion
+├── device_settings_db.py    # Canonical settings DB from DeviceSettings.zip
 ├── device_settings.py       # Direct HID settings read/write + translation layer
 ├── device_identity.py       # Identity preservation during flash
 ├── fwu_flash.py             # Savi DECT flasher
@@ -269,6 +272,7 @@ polytool/
 ├── data/
 │   ├── Devices.config       # Device PID -> handler mappings
 │   ├── DeviceSetting.json   # Settings value database (from LensService)
+│   ├── DeviceSettings.zip   # Canonical per-device settings (from Poly Studio LegacyHost)
 │   └── settingsCategories.json  # Poly Studio UI settings layout (146 settings)
 ├── web/
 │   ├── index.html           # Dashboard SPA entry point

@@ -4,6 +4,7 @@ __pycache__/
 *.bak
 .DS_Store
 *.zip
+!data/DeviceSettings.zip
 firmware_cache/
 dump.jsonl
 debug*.js
