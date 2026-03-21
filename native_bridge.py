@@ -478,7 +478,7 @@ class NativeBridge:
             elif msg_type == "DeviceSettings":
                 payload = msg.get("payload", {})
                 dev_id = str(payload.get("deviceId", ""))
-                for s in payload.get("settings", []):
+                for s in (payload.get("settings") or []):
                     sid = s.get("id", "")
                     val = s.get("value", "")
                     if dev_id and sid:
