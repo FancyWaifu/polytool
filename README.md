@@ -250,42 +250,61 @@ python3 probes/dect_settings_probe.py --test scan_cmds   # Scan CVM command fami
 
 ```
 polytool/
-├── polytool.py              # Main CLI
+│
+│── # ─── Core Server & CLI ───────────────────────────
+├── lensserver.py            # Drop-in LensService replacement (Poly Studio integration)
+├── polytool.py              # Main CLI (scan, info, battery, updates, flash, catalog)
 ├── menu.py                  # Interactive terminal menu
-├── polylens.py              # Web dashboard (Flask)
-├── lensserver.py            # Drop-in LensService replacement
 ├── lensapi.py               # LensServiceApi TCP client
-├── native_bridge.py         # Direct ctypes interface to Poly native libs
-├── lens_settings.py         # Settings profiles and API format conversion
-├── device_settings_db.py    # Canonical settings DB from DeviceSettings.zip
-├── device_settings.py       # Direct HID settings read/write + translation layer
-├── device_identity.py       # Identity preservation during flash
-├── fwu_flash.py             # Savi DECT flasher
-├── bw_flash.py              # Blackwire 3220 flasher
-├── polyserver.py            # Fleet management server
+│
+│── # ─── Device Communication ────────────────────────
+├── native_bridge.py         # ctypes interface to Poly native DLLs (DECT/BT)
+├── native_bridge_worker.py  # 32-bit subprocess proxy for 64-bit Windows
+├── device_settings.py       # Direct HID settings read/write (CX2070x/BladeRunner)
+├── device_settings_db.py    # Canonical settings DB from DeviceSettings.zip (217 devices)
+├── lens_settings.py         # Settings profiles, API format, PREFER_OFFICIAL_SETTINGS
+├── device_identity.py       # Serial/calibration preservation during flash
+├── polybus.py               # Native PolyBus library interface (ctypes)
+│
+│── # ─── Firmware Flashing ───────────────────────────
+├── bw_flash.py              # Blackwire 3220/5xx flasher (CX2070x EEPROM)
+├── fwu_flash.py             # Savi DECT flasher (FWU API / CVM)
+│
+│── # ─── Web & Fleet Management ──────────────────────
+├── polylens.py              # Single-workstation web dashboard (Flask)
+├── polyserver.py            # Fleet management server (PostgreSQL)
 ├── polyagent.py             # Fleet workstation agent
-├── polyremote.py            # Remote settings CLI
-├── clockwork_client.py      # Legacy compatibility wrapper
-├── polybus.py               # Native PolyBus library interface
-├── monitor_legacyhost.py    # Log file monitor
-├── RE_FINDINGS.txt          # Reverse engineering documentation
+├── polyremote.py            # Remote settings CLI with JSON presets
+├── clockwork_client.py      # Legacy compatibility wrapper for lensapi
+│
+│── # ─── Monitoring & Debug ──────────────────────────
+├── monitor_legacyhost.py    # Poly Lens log file monitor
+│
+│── # ─── Data ────────────────────────────────────────
 ├── data/
-│   ├── Devices.config       # Device PID -> handler mappings
-│   ├── DeviceSetting.json   # Settings value database (from LensService)
-│   ├── DeviceSettings.zip   # Canonical per-device settings (from Poly Studio LegacyHost)
-│   └── settingsCategories.json  # Poly Studio UI settings layout (146 settings)
-├── web/
-│   ├── index.html           # Dashboard SPA entry point
-│   ├── app.js               # Frontend JavaScript
-│   └── style.css            # Dashboard styling
-├── presets/
+│   ├── DeviceSettings.zip       # Canonical per-device settings (from Poly Studio)
+│   ├── Devices.config           # Device PID → handler mappings
+│   ├── DeviceSetting.json       # Settings internal keys → display values
+│   └── settingsCategories.json  # Poly Studio renderer settings (146 entries)
+├── presets/                     # JSON settings presets for polyremote
 │   ├── office_standard.json
 │   ├── call_center.json
 │   └── quiet_mode.json
-└── probes/
-    ├── fwu_probe.py         # Unified HID protocol probe
-    ├── dect_settings_probe.py  # DECT settings write protocol probe
-    └── hid_helpers.py       # Shared HID utilities
+│
+│── # ─── Web Frontends ───────────────────────────────
+├── web/                         # polylens.py dashboard
+├── web_admin/                   # polyserver.py admin dashboard
+│
+│── # ─── Research & Probes ───────────────────────────
+├── probes/
+│   ├── fwu_probe.py             # HID protocol probe
+│   ├── dect_settings_probe.py   # DECT settings write probe
+│   └── hid_helpers.py           # Shared HID utilities
+│
+│── # ─── Documentation ───────────────────────────────
+├── RE_FINDINGS.txt          # Reverse engineering findings
+├── CLAUDE.md                # Claude Code project context
+└── README.md
 ```
 
 ## Requirements

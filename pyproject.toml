@@ -1,0 +1,27 @@
+[project]
+name = "polytool"
+version = "2.0.0"
+description = "Open-source Poly/Plantronics headset management toolkit"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = [
+    "hidapi>=0.14.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+web = ["flask>=3.0.0"]
+fleet = ["flask>=3.0.0", "psycopg2-binary>=2.9.0"]
+tui = ["rich>=13.7.0"]
+usbreset = ["pyusb>=1.2.0"]
+all = [
+    "flask>=3.0.0",
+    "rich>=13.7.0",
+    "pyusb>=1.2.0",
+    "psycopg2-binary>=2.9.0",
+]
+
+[project.scripts]
+polytool = "polytool:main"
+lensserver = "lensserver:main"
