@@ -77,6 +77,9 @@ def load_or_create_config():
 
 SERVER_CONFIG = load_or_create_config()
 
+# Session store: maps random session tokens to True (valid session)
+_sessions = {}
+
 
 def require_agent_key(f):
     """Decorator: require valid agent API key in Authorization header."""
@@ -91,38 +94,42 @@ def require_agent_key(f):
 
 
 def require_admin_key(f):
-    """Decorator: require valid admin API key."""
+    """Decorator: require valid admin API key or session token."""
     @functools.wraps(f)
     def wrapped(*args, **kwargs):
-        # Allow dashboard access without auth (served locally)
-        # API mutations require the admin key
+        # Check Bearer header — must be the real admin_key
         auth = request.headers.get("Authorization", "")
-        token = auth.replace("Bearer ", "").strip()
-        # Also check query param for simple dashboard use
-        if not token:
-            token = request.args.get("key", "")
-        if not token:
-            # Check session cookie
-            token = request.cookies.get("admin_key", "")
-        if not token or not hmac.compare_digest(token, SERVER_CONFIG["admin_key"]):
-            return jsonify({"error": "Unauthorized — admin key required"}), 401
-        return f(*args, **kwargs)
+        bearer = auth.replace("Bearer ", "").strip()
+        if bearer and hmac.compare_digest(bearer, SERVER_CONFIG["admin_key"]):
+            return f(*args, **kwargs)
+        # Check query param — must be the real admin_key
+        qkey = request.args.get("key", "")
+        if qkey and hmac.compare_digest(qkey, SERVER_CONFIG["admin_key"]):
+            return f(*args, **kwargs)
+        # Check session cookie — must be a valid session token
+        session_token = request.cookies.get("session", "")
+        if session_token and session_token in _sessions:
+            return f(*args, **kwargs)
+        return jsonify({"error": "Unauthorized — admin key required"}), 401
     return wrapped
 
 
 @app.route("/api/auth/login", methods=["POST"])
 def auth_login():
-    """Admin login — exchange admin key for a session."""
+    """Admin login — exchange admin key for a session token."""
     data = request.get_json() or {}
     key = data.get("key", "")
     if hmac.compare_digest(key, SERVER_CONFIG["admin_key"]):
+        session_token = secrets.token_urlsafe(32)
+        _sessions[session_token] = time.time()
         resp = jsonify({"status": "ok"})
-        resp.set_cookie("admin_key", key, httponly=True, samesite="Strict", max_age=86400)
+        resp.set_cookie("session", session_token, httponly=True, samesite="Strict", max_age=86400)
         return resp
     return jsonify({"error": "Invalid admin key"}), 401
 
 
 @app.route("/api/auth/keys")
+@require_admin_key
 def auth_show_keys():
     """Show API keys (only accessible from localhost)."""
     if request.remote_addr not in ("127.0.0.1", "::1"):
@@ -141,11 +148,24 @@ RATE_LIMIT_MAX = 120    # requests per window
 RATE_LIMIT_WINDOW = 60  # seconds
 
 
+_rate_limit_last_cleanup = 0.0
+
+
 @app.before_request
 def rate_limit():
-    """Simple in-memory rate limiter."""
+    """Simple in-memory rate limiter with periodic cleanup."""
+    global _rate_limit_last_cleanup
     ip = request.remote_addr
     now = time.time()
+
+    # Periodic cleanup: purge stale entries every 5 minutes
+    if now - _rate_limit_last_cleanup > 300:
+        _rate_limit_last_cleanup = now
+        stale = [k for k, (_, ws) in _rate_limit_store.items()
+                 if now - ws > RATE_LIMIT_WINDOW]
+        for k in stale:
+            del _rate_limit_store[k]
+
     if ip in _rate_limit_store:
         count, window_start = _rate_limit_store[ip]
         if now - window_start > RATE_LIMIT_WINDOW:
@@ -218,15 +238,9 @@ def get_db():
 
 
 def db_execute(conn, sql, params=None):
-    """Execute SQL, converting ? placeholders to %s for psycopg2."""
-    sql = sql.replace("?", "%s")
-    sql = sql.replace("datetime('now')", "NOW()")
-    sql = sql.replace("datetime('now', '-5 minutes')", "NOW() - INTERVAL '5 minutes'")
+    """Execute SQL with psycopg2."""
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    if params:
-        cur.execute(sql, params)
-    else:
-        cur.execute(sql)
+    cur.execute(sql, params)
     return cur
 
 
@@ -374,7 +388,7 @@ def agent_report():
     # Update agent info
     db_execute(conn, """
         INSERT INTO agents (agent_id, hostname, username, platform, ip_address, agent_version, last_seen)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT(agent_id) DO UPDATE SET
             hostname=excluded.hostname, username=excluded.username,
             platform=excluded.platform, ip_address=excluded.ip_address,
@@ -397,7 +411,7 @@ def agent_report():
         # Fetch existing settings to detect changes
         existing = db_fetchone(conn, """
             SELECT settings_json FROM devices
-            WHERE agent_id = ? AND serial = ? AND pid = ?
+            WHERE agent_id = %s AND serial = %s AND pid = %s
         """, (agent_id, serial, pid))
 
         if existing:
@@ -414,7 +428,7 @@ def agent_report():
                     db_execute(conn, """
                         INSERT INTO settings_history
                             (agent_id, device_serial, device_pid, setting_name, old_value, new_value, changed_by)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """, (agent_id, serial, pid, sname,
                           str(old_val) if old_val is not None else None,
                           str(new_val) if new_val is not None else None,
@@ -424,7 +438,7 @@ def agent_report():
             INSERT INTO devices (agent_id, pid, pid_hex, serial, product_name,
                 friendly_name, firmware, category, dfu_executor, family,
                 battery_level, last_seen, settings_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT(agent_id, serial, pid) DO UPDATE SET
                 product_name=excluded.product_name, friendly_name=excluded.friendly_name,
                 firmware=excluded.firmware, category=excluded.category,
@@ -447,14 +461,14 @@ def agent_report():
         if battery >= 0 and battery < 5:
             db_execute(conn, """
                 INSERT INTO alerts (alert_type, device_serial, agent_id, message, severity)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             """, ("low_battery", serial, agent_id,
                   f"Critical battery level: {battery}% on {dev.get('friendly_name', dev.get('product_name', pid))}",
                   "critical"))
         elif battery >= 0 and battery < 20:
             db_execute(conn, """
                 INSERT INTO alerts (alert_type, device_serial, agent_id, message, severity)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             """, ("low_battery", serial, agent_id,
                   f"Low battery: {battery}% on {dev.get('friendly_name', dev.get('product_name', pid))}",
                   "warning"))
@@ -474,13 +488,13 @@ def agent_report():
                 if fw != p["policy_value"]:
                     db_execute(conn, """
                         INSERT INTO alerts (alert_type, device_serial, agent_id, message, severity)
-                        VALUES (?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s)
                     """, ("firmware_mismatch", serial, agent_id,
                           f"Firmware {fw} does not match policy '{p['name']}' (expected {p['policy_value']})",
                           "warning"))
 
     # Log
-    db_execute(conn, "INSERT INTO audit_log (agent_id, action, detail) VALUES (?, ?, ?)",
+    db_execute(conn, "INSERT INTO audit_log (agent_id, action, detail) VALUES (%s, %s, %s)",
                (agent_id, "report", f"{len(devices)} device(s)"))
 
     conn.commit()
@@ -499,7 +513,7 @@ def agent_heartbeat():
         return jsonify({"error": "agent_id required"}), 400
 
     conn = get_db()
-    db_execute(conn, "UPDATE agents SET last_seen = ? WHERE agent_id = ?",
+    db_execute(conn, "UPDATE agents SET last_seen = %s WHERE agent_id = %s",
                (datetime.utcnow().isoformat(), agent_id))
     conn.commit()
     conn.close()
@@ -519,7 +533,7 @@ def agent_get_commands():
     rows = db_fetchall(conn, """
         SELECT id, command_type, command_data, device_serial, device_pid
         FROM commands
-        WHERE agent_id = ? AND status = 'pending'
+        WHERE agent_id = %s AND status = 'pending'
         ORDER BY created_at ASC
     """, (agent_id,))
     conn.close()
@@ -540,13 +554,13 @@ def agent_command_result():
 
     conn = get_db()
     db_execute(conn, """
-        UPDATE commands SET status = ?, result = ?, completed_at = ?
-        WHERE id = ?
+        UPDATE commands SET status = %s, result = %s, completed_at = %s
+        WHERE id = %s
     """, (data.get("status", "done"), data.get("result", ""),
           datetime.utcnow().isoformat(), cmd_id))
 
     # Audit log
-    db_execute(conn, "INSERT INTO audit_log (agent_id, device_serial, action, detail) VALUES (?, ?, ?, ?)",
+    db_execute(conn, "INSERT INTO audit_log (agent_id, device_serial, action, detail) VALUES (%s, %s, %s, %s)",
                (data.get("agent_id", ""), data.get("device_serial", ""),
                 "command_result", json.dumps(data)))
     conn.commit()
@@ -679,12 +693,12 @@ def fleet_push_command():
     for aid in agent_ids:
         cur = db_execute(conn, """
             INSERT INTO commands (agent_id, device_serial, device_pid, command_type, command_data)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
         """, (aid, device_serial, device_pid, command_type,
               json.dumps(command_data) if isinstance(command_data, dict) else command_data))
         cmd_ids.append(cur.lastrowid)
 
-    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (?, ?)",
+    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (%s, %s)",
                ("push_command", json.dumps({
                    "type": command_type, "agents": len(agent_ids),
                    "pid": device_pid, "serial": device_serial,
@@ -713,12 +727,12 @@ def create_policy():
     cur = db_execute(conn, """
         INSERT INTO policies (name, description, target_pid, target_category,
             policy_type, policy_value, enabled)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
     """, (data.get("name", ""), data.get("description", ""),
           data.get("target_pid", "*"), data.get("target_category", "*"),
           data.get("policy_type", ""), data.get("policy_value", ""),
           1 if data.get("enabled", True) else 0))
-    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (?, ?)",
+    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (%s, %s)",
                ("create_policy", json.dumps(data)))
     conn.commit()
     policy_id = cur.lastrowid
@@ -730,8 +744,8 @@ def create_policy():
 @require_admin_key
 def delete_policy(policy_id):
     conn = get_db()
-    db_execute(conn, "DELETE FROM policies WHERE id = ?", (policy_id,))
-    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (?, ?)",
+    db_execute(conn, "DELETE FROM policies WHERE id = %s", (policy_id,))
+    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (%s, %s)",
                ("delete_policy", str(policy_id)))
     conn.commit()
     conn.close()
@@ -781,7 +795,7 @@ def fleet_stats():
 def audit_log():
     limit = request.args.get("limit", 100, type=int)
     conn = get_db()
-    rows = db_fetchall(conn, "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?",
+    rows = db_fetchall(conn, "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT %s",
                        (limit,))
     conn.close()
     return jsonify({"log": [dict(r) for r in rows]})
@@ -798,7 +812,7 @@ def fleet_device_detail(device_id):
         SELECT d.*, a.hostname, a.username, a.platform, a.last_seen as agent_last_seen
         FROM devices d
         LEFT JOIN agents a ON d.agent_id = a.agent_id
-        WHERE d.id = ?
+        WHERE d.id = %s
     """, (device_id,))
     if not dev:
         conn.close()
@@ -842,8 +856,8 @@ def fleet_device_detail(device_id):
     # Command history
     cmds = db_fetchall(conn, """
         SELECT * FROM commands
-        WHERE (device_pid = ? OR device_pid = '*')
-          AND (agent_id = ? OR agent_id = '*')
+        WHERE (device_pid = %s OR device_pid = '*')
+          AND (agent_id = %s OR agent_id = '*')
         ORDER BY created_at DESC LIMIT 20
     """, (d.get("pid", ""), d.get("agent_id", "")))
     d["command_history"] = [dict(c) for c in cmds]
@@ -890,7 +904,7 @@ def fleet_enforce():
         return jsonify({"error": "policy_id required"}), 400
 
     conn = get_db()
-    policy = db_fetchone(conn, "SELECT * FROM policies WHERE id = ? AND enabled = 1", (policy_id,))
+    policy = db_fetchone(conn, "SELECT * FROM policies WHERE id = %s AND enabled = 1", (policy_id,))
     if not policy:
         conn.close()
         return jsonify({"error": "Policy not found or disabled"}), 404
@@ -916,7 +930,7 @@ def fleet_enforce():
                 if actual is not None and actual != expected:
                     db_execute(conn, """
                         INSERT INTO commands (agent_id, device_serial, device_pid, command_type, command_data)
-                        VALUES (?, ?, ?, ?, ?)
+                        VALUES (%s, %s, %s, %s, %s)
                     """, (d["agent_id"], d.get("serial", "*"), d["pid"],
                           "set_setting", json.dumps({"name": sname, "value": expected})))
                     pushed += 1
@@ -927,7 +941,7 @@ def fleet_enforce():
                 # Firmware enforcement is informational only — cannot auto-push DFU
                 pass
 
-    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (?, ?)",
+    db_execute(conn, "INSERT INTO audit_log (action, detail) VALUES (%s, %s)",
                ("enforce_policy", json.dumps({"policy_id": policy_id, "commands_pushed": pushed})))
     conn.commit()
     conn.close()
@@ -1009,7 +1023,7 @@ def get_alerts():
     conn = get_db()
     if severity:
         rows = db_fetchall(conn, """
-            SELECT * FROM alerts WHERE acknowledged = 0 AND severity = ?
+            SELECT * FROM alerts WHERE acknowledged = 0 AND severity = %s
             ORDER BY created_at DESC
         """, (severity,))
     else:
@@ -1026,7 +1040,7 @@ def get_alerts():
 def acknowledge_alert(alert_id):
     """Mark an alert as acknowledged."""
     conn = get_db()
-    db_execute(conn, "UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
+    db_execute(conn, "UPDATE alerts SET acknowledged = 1 WHERE id = %s", (alert_id,))
     conn.commit()
     conn.close()
     return jsonify({"status": "ok"})

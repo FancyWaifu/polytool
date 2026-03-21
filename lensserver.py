@@ -168,13 +168,18 @@ class LensServer:
         while self.running:
             time.sleep(5)
             try:
-                old_ids = set(self.devices.keys())
+                with self._lock:
+                    old_ids = set(self.devices.keys())
                 current_ids = self.discover_devices()
-                new_ids = current_ids if current_ids else set(self.devices.keys())
+                with self._lock:
+                    new_ids = current_ids if current_ids else set(self.devices.keys())
 
                 # New devices
                 for did in new_ids - old_ids:
-                    dev = self.devices[did]
+                    with self._lock:
+                        dev = self.devices.get(did)
+                    if not dev:
+                        continue
                     clean_dev = {k: v for k, v in dev.items() if not k.startswith("_")}
                     _log(f"  ++ Device added: {dev.get('productName', '?')}")
                     self.broadcast({
@@ -194,7 +199,8 @@ class LensServer:
 
                 # Removed devices (skip native bridge devices — they're not in USB scan)
                 for did in old_ids - new_ids:
-                    dev = self.devices.get(did, {})
+                    with self._lock:
+                        dev = self.devices.get(did, {})
                     ptd = dev.get("_polytool_dev", {})
                     if ptd.get("_native_id"):
                         continue  # BT device from native bridge, not USB-discoverable
@@ -351,7 +357,9 @@ class LensServer:
         })
 
         # Push DeviceAttached for each known device
-        for did, dev in self.devices.items():
+        with self._lock:
+            devices_snapshot = list(self.devices.items())
+        for did, dev in devices_snapshot:
             clean_dev = {k: v for k, v in dev.items() if not k.startswith("_")}
             self.send_msg(client_sock, {
                 "type": "DeviceAttached",
@@ -370,7 +378,8 @@ class LensServer:
         if not self._native_bridge:
             return
         # Match our device ID to native device ID
-        dev = self.devices.get(device_id, {})
+        with self._lock:
+            dev = self.devices.get(device_id, {})
         ptd = dev.get("_polytool_dev", {})
         native_id = ptd.get("_native_id", "")
 
@@ -410,8 +419,10 @@ class LensServer:
 
     def on_get_device_list(self, msg, client_sock):
         """Handle GetDeviceList."""
+        with self._lock:
+            devices_values = list(self.devices.values())
         clean_devices = []
-        for dev in self.devices.values():
+        for dev in devices_values:
             clean_devices.append({k: v for k, v in dev.items() if not k.startswith("_")})
         return {
             "type": "DeviceList",
@@ -450,7 +461,8 @@ class LensServer:
         name = msg.get("name", "")
 
         # Handle special built-in settings
-        dev = self.devices.get(device_id, {})
+        with self._lock:
+            dev = self.devices.get(device_id, {})
 
         # Build a proper DeviceSetting response
         # The GUI destructures: const {name} = setting
@@ -517,9 +529,10 @@ class LensServer:
             return None  # already sent
 
         # Store in cache
-        if device_id not in self._device_settings_cache:
-            self._device_settings_cache[device_id] = {}
-        self._device_settings_cache[device_id][name] = value
+        with self._lock:
+            if device_id not in self._device_settings_cache:
+                self._device_settings_cache[device_id] = {}
+            self._device_settings_cache[device_id][name] = value
 
         # Try writing to device via HID
         success = self.write_device_setting(device_id, name, value)
@@ -558,7 +571,10 @@ class LensServer:
         from lens_settings import (get_settings_for_device, settings_to_api_format,
                                    get_device_family)
 
-        dev = self.devices.get(device_id, {})
+        with self._lock:
+            dev = self.devices.get(device_id, {})
+            dynamic_defs = self._dynamic_profiles.get(device_id, [])
+            current_values = self._device_settings_cache.get(device_id, {}).copy()
         ptd = dev.get("_polytool_dev", {})
         usage_page = ptd.get("usage_page", 0)
         dfu_executor = ptd.get("dfu_executor", "")
@@ -569,13 +585,10 @@ class LensServer:
         # lens_settings, which itself checks PREFER_OFFICIAL_SETTINGS)
         from lens_settings import PREFER_OFFICIAL_SETTINGS
         hardcoded_defs = get_settings_for_device(usage_page, dfu_executor, pid=pid)
-        dynamic_defs = self._dynamic_profiles.get(device_id, [])
         if PREFER_OFFICIAL_SETTINGS:
             settings_defs = dynamic_defs if dynamic_defs else hardcoded_defs
         else:
             settings_defs = dynamic_defs if len(dynamic_defs) > len(hardcoded_defs) else hardcoded_defs
-
-        current_values = self._device_settings_cache.get(device_id, {})
 
         # DECT/Voyager settings are writable when native bridge is available
         force_writable = False
@@ -595,7 +608,8 @@ class LensServer:
     def on_get_dfu_status(self, msg, client_sock):
         """Handle GetDeviceDFUStatus — check Poly Cloud for firmware updates."""
         device_id = msg.get("deviceId", "")
-        dev = self.devices.get(device_id, {})
+        with self._lock:
+            dev = self.devices.get(device_id, {})
 
         # Return cached result if available
         if device_id in self._dfu_cache:
@@ -636,7 +650,8 @@ class LensServer:
 
     def _check_firmware_update(self, device_id):
         """Check Poly Cloud for available firmware update."""
-        dev = self.devices.get(device_id, {})
+        with self._lock:
+            dev = self.devices.get(device_id, {})
         current_fw = dev.get("firmwareVersion", "")
         pid = dev.get("productId", "")
         pid_query = pid.lstrip("0") or pid
@@ -707,7 +722,8 @@ class LensServer:
 
     def on_get_primary_device(self, msg, client_sock):
         # Return first device as primary
-        first_id = next(iter(self.devices), "")
+        with self._lock:
+            first_id = next(iter(self.devices), "")
         return {
             "type": "PrimaryDevice",
             "apiVersion": API_VERSION,
@@ -740,9 +756,10 @@ class LensServer:
 
         if active and value is not None:
             # Update cache with current slider value
-            if device_id not in self._device_settings_cache:
-                self._device_settings_cache[device_id] = {}
-            self._device_settings_cache[device_id][name] = value
+            with self._lock:
+                if device_id not in self._device_settings_cache:
+                    self._device_settings_cache[device_id] = {}
+                self._device_settings_cache[device_id][name] = value
 
             # Try writing to device
             self.write_device_setting(device_id, name, value)
@@ -780,10 +797,11 @@ class LensServer:
     def on_remove_device(self, msg, client_sock):
         """Handle RemoveDevice — forget a detached device."""
         device_id = msg.get("deviceId", "")
-        if device_id in self.devices:
-            dev = self.devices.pop(device_id)
+        with self._lock:
+            dev = self.devices.pop(device_id, None)
             self._device_settings_cache.pop(device_id, None)
             self._dynamic_profiles.pop(device_id, None)
+        if dev is not None:
             _log(f"  Removed device: {dev.get('productName', device_id)}")
             self.broadcast({
                 "type": "DeviceDetached",
@@ -818,7 +836,8 @@ class LensServer:
 
     def get_product_images(self, device_id):
         """Fetch product images from Poly Cloud for a device."""
-        dev = self.devices.get(device_id, {})
+        with self._lock:
+            dev = self.devices.get(device_id, {})
         pid = dev.get("productId", "")
         if not pid:
             return None
@@ -871,10 +890,12 @@ class LensServer:
                 current_ids.add(device_id)
 
                 # Only add if new (don't overwrite existing — preserves state)
-                if device_id in self.devices:
+                with self._lock:
+                    already_exists = device_id in self.devices
+                if already_exists:
                     continue
 
-                self.devices[device_id] = {
+                new_device = {
                     # camelCase — matches .NET JsonSerializer default naming
                     "deviceId": device_id,
                     "parentId": "",
@@ -933,16 +954,20 @@ class LensServer:
                     },
                 }
 
+                with self._lock:
+                    self.devices[device_id] = new_device
+
                 # Populate settings cache from real HID reads
                 self._populate_settings_cache(device_id, dev)
 
             # Remove USB devices no longer present (preserve native bridge devices)
-            removed = set(self.devices.keys()) - current_ids
-            for did in removed:
-                dev = self.devices.get(did, {})
-                ptd = dev.get("_polytool_dev", {})
-                if not ptd.get("_native_id"):  # only remove USB devices
-                    del self.devices[did]
+            with self._lock:
+                removed = set(self.devices.keys()) - current_ids
+                for did in removed:
+                    dev_entry = self.devices.get(did, {})
+                    ptd = dev_entry.get("_polytool_dev", {})
+                    if not ptd.get("_native_id"):  # only remove USB devices
+                        del self.devices[did]
 
             return current_ids
         except Exception as e:
@@ -970,10 +995,11 @@ class LensServer:
             model_id = ndev.get("modelId", "")
 
             # Check if we already have this device (by PID match)
-            already_have = any(
-                d.get("pid") == str(pid) or d.get("productId") == model_id.lower()
-                for d in self.devices.values()
-            )
+            with self._lock:
+                already_have = any(
+                    d.get("pid") == str(pid) or d.get("productId") == model_id.lower()
+                    for d in self.devices.values()
+                )
             if already_have:
                 continue
 
@@ -991,7 +1017,7 @@ class LensServer:
                     serial = val.get("headset", "") or val.get("base", "")
                     break
 
-            self.devices[device_id] = {
+            new_device = {
                 "deviceId": device_id,
                 "parentId": "",
                 "productName": name,
@@ -1040,8 +1066,11 @@ class LensServer:
             }
             # Update call/mute state from native bridge
             call_state = bridge.get_call_state()
-            self.devices[device_id]["isMuted"] = call_state.get("muted", False)
-            self.devices[device_id]["isInCall"] = call_state.get("inCall", False)
+            new_device["isMuted"] = call_state.get("muted", False)
+            new_device["isInCall"] = call_state.get("inCall", False)
+
+            with self._lock:
+                self.devices[device_id] = new_device
 
             _log(f"    {name} (BT via native bridge, fw {fw_display})", verbose_only=True)
 
@@ -1063,7 +1092,9 @@ class LensServer:
         # Map native bridge devices to ALL our devices (including USB-discovered ones)
         # by matching PID. This gives USB devices dynamic profiles too.
         native_devs = bridge.get_devices()
-        for did, dev in self.devices.items():
+        with self._lock:
+            devices_snapshot = list(self.devices.items())
+        for did, dev in devices_snapshot:
             ptd = dev.get("_polytool_dev", {})
             native_id = ptd.get("_native_id", "")
 
@@ -1088,7 +1119,8 @@ class LensServer:
             hex_ids = list(native_values.keys())
             profile = build_dynamic_profile(hex_ids)
             if profile:
-                self._dynamic_profiles[did] = profile
+                with self._lock:
+                    self._dynamic_profiles[did] = profile
 
             # Populate settings cache with actual values
             # Translate HID-level values to UI-level values where needed
@@ -1110,14 +1142,16 @@ class LensServer:
 
             if cache:
                 # Merge with existing cache (USB HID reads) rather than replacing
-                existing = self._device_settings_cache.get(did, {})
-                existing.update(cache)
-                self._device_settings_cache[did] = existing
+                with self._lock:
+                    existing = self._device_settings_cache.get(did, {})
+                    existing.update(cache)
+                    self._device_settings_cache[did] = existing
                 _log(f"  Read {len(cache)} settings from native bridge for {dev.get('productName', did)}")
 
     def read_device_settings(self, device_id):
         """Read settings for a device via our HID code."""
-        dev = self.devices.get(device_id, {})
+        with self._lock:
+            dev = self.devices.get(device_id, {})
         ptd = dev.get("_polytool_dev", {})
         if not ptd:
             return []
@@ -1147,7 +1181,8 @@ class LensServer:
                     if s.get("value") is not None and s.get("name"):
                         cache[s["name"]] = s["value"]
                 if cache:
-                    self._device_settings_cache[device_id] = cache
+                    with self._lock:
+                        self._device_settings_cache[device_id] = cache
                     _log(f"  Read {len(cache)} settings from {device_id} via HID")
         except Exception as e:
             _log(f"  HID settings read failed for {device_id}: {e}", verbose_only=True)
@@ -1155,7 +1190,8 @@ class LensServer:
     def write_device_setting(self, device_id, name, value):
         """Write a setting to device. Uses direct HID for CX2070x/BladeRunner,
         native bridge for DECT/Voyager devices."""
-        dev = self.devices.get(device_id, {})
+        with self._lock:
+            dev = self.devices.get(device_id, {})
         ptd = dev.get("_polytool_dev", {})
         if not ptd:
             return False
@@ -1237,7 +1273,8 @@ class LensServer:
             return False
 
         # Find the native device ID (int64 from the native library)
-        dev = self.devices.get(device_id, {})
+        with self._lock:
+            dev = self.devices.get(device_id, {})
         ptd = dev.get("_polytool_dev", {})
         native_dev_id = ptd.get("_native_id")
 
