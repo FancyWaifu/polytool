@@ -50,8 +50,6 @@ from device_settings import (
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-POLY_VIDS = {0x047F, 0x0965, 0x03F0, 0x1BD7}
-VENDOR_USAGE_PAGES = {0xFFA0, 0xFFA2, 0xFF52, 0xFF58}
 VERSION = "1.0.0"
 
 LOG_DIR = Path.home() / ".polytool" / "logs"
@@ -77,49 +75,27 @@ logger = setup_logging()
 
 def discover_devices():
     """Find all connected Poly devices. Does NOT interfere with Poly Lens."""
-    seen = {}
-    for d in hid.enumerate():
-        vid = d.get("vendor_id", 0)
-        if vid not in POLY_VIDS:
-            continue
-        pid = d.get("product_id", 0)
-        usage_page = d.get("usage_page", 0)
-        serial = d.get("serial_number", "") or ""
-
-        # Prefer vendor-specific usage page per device
-        key = (pid, serial) if serial else (pid, d.get("interface_number", 0))
-        existing = seen.get(key)
-        if existing:
-            if usage_page in VENDOR_USAGE_PAGES and existing["usage_page"] not in VENDOR_USAGE_PAGES:
-                pass  # replace
-            elif existing["usage_page"] in VENDOR_USAGE_PAGES:
-                continue
-            else:
-                continue
-
-        # Determine DFU executor for family detection
-        from polytool import DFU_EXECUTOR_MAP, CODENAME_MAP, PID_CODENAMES
-        lens_pid = f"{pid:x}"
-        dfu_executor = DFU_EXECUTOR_MAP.get(lens_pid, "")
-        codename = PID_CODENAMES.get(pid, "")
+    from devices import discover_devices as _discover, DFU_EXECUTOR_MAP, CODENAME_MAP, PID_CODENAMES
+    poly_devices = _discover()
+    results = []
+    for dev in poly_devices:
+        codename = PID_CODENAMES.get(dev.pid, "")
         friendly = CODENAME_MAP.get(codename, "") if codename else ""
-
-        seen[key] = {
-            "vid": vid,
-            "pid": pid,
-            "pid_hex": f"0x{pid:04X}",
-            "serial": serial,
-            "product_name": d.get("product_string", "") or f"Poly 0x{pid:04X}",
-            "friendly_name": friendly or d.get("product_string", ""),
-            "manufacturer": d.get("manufacturer_string", ""),
-            "usage_page": usage_page,
-            "path": d.get("path", b""),
-            "release_number": d.get("release_number", 0),
-            "dfu_executor": dfu_executor,
-            "family": get_device_family(usage_page, dfu_executor),
-        }
-
-    return list(seen.values())
+        results.append({
+            "vid": dev.vid,
+            "pid": dev.pid,
+            "pid_hex": dev.pid_hex,
+            "serial": dev.serial or "",
+            "product_name": dev.product_name or f"Poly {dev.pid_hex}",
+            "friendly_name": friendly or dev.product_name or "",
+            "manufacturer": dev.manufacturer or "",
+            "usage_page": dev.usage_page,
+            "path": dev.path,
+            "release_number": dev.release_number,
+            "dfu_executor": dev.dfu_executor,
+            "family": get_device_family(dev.usage_page, dev.dfu_executor),
+        })
+    return results
 
 
 # ── Output Helpers ────────────────────────────────────────────────────────────

@@ -42,8 +42,7 @@ except ImportError:
 # ── Setup ─────────────────────────────────────────────────────────────────
 
 VERSION = "1.0.0"
-POLY_VIDS = {0x047F, 0x0965, 0x03F0, 0x1BD7}
-VENDOR_USAGE_PAGES = {0xFFA0, 0xFFA2, 0xFF52, 0xFF58, 0xFF99}
+from devices import POLY_VIDS, VENDOR_USAGE_PAGES
 
 LOG_DIR = Path.home() / ".polytool" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -72,75 +71,24 @@ def get_agent_id():
 
 def discover_devices():
     """Find all connected Poly devices."""
+    from devices import (discover_devices as _discover, DFU_EXECUTOR_MAP,
+                         PID_CODENAMES, CODENAME_MAP, DEVICE_CATEGORIES)
+
     seen = {}
-    for d in hid.enumerate():
-        vid = d.get("vendor_id", 0)
-        if vid not in POLY_VIDS:
-            continue
-        pid = d.get("product_id", 0)
-        serial = d.get("serial_number", "") or ""
-        usage_page = d.get("usage_page", 0)
-
-        key = (pid, serial) if serial else (pid, d.get("interface_number", 0))
-        existing = seen.get(key)
-        if existing:
-            if usage_page in VENDOR_USAGE_PAGES and existing["usage_page"] not in VENDOR_USAGE_PAGES:
-                pass
-            elif existing["usage_page"] in VENDOR_USAGE_PAGES:
-                continue
-            else:
-                continue
-
-        # BCD firmware decode
-        rn = d.get("release_number", 0)
-        if rn > 0:
-            digits = "".join(str((rn >> s) & 0xF) for s in (12, 8, 4, 0)).lstrip("0") or "0"
-            fw = digits[:-2] + "." + digits[-2:] if len(digits) > 2 else "0." + digits.zfill(2)
-        else:
-            fw = "unknown"
-
-        # Try to determine family/executor
-        try:
-            from polytool import DFU_EXECUTOR_MAP, PID_CODENAMES, CODENAME_MAP, DEVICE_CATEGORIES
-            pid_hex = f"{pid:x}"
-            dfu = DFU_EXECUTOR_MAP.get(pid_hex, "")
-            codename = PID_CODENAMES.get(pid, "")
-            friendly = CODENAME_MAP.get(codename, "") or d.get("product_string", "")
-
-            # Category
-            search = f"{friendly} {codename} {d.get('product_string', '')}".lower()
-            category = "other"
-            for cat, keywords in DEVICE_CATEGORIES.items():
-                if any(kw.lower() in search for kw in keywords):
-                    category = cat
-                    break
-        except ImportError:
-            dfu = ""
-            friendly = d.get("product_string", "")
-            category = "unknown"
-
-        # Family
-        if usage_page == 0xFFA0:
-            family = "cx2070x"
-        elif usage_page == 0xFFA2:
-            family = "dect"
-        elif dfu in ("HidTiDfu", "SyncDfu", "StudioDfu"):
-            family = "bladerunner"
-        else:
-            family = "unknown"
-
+    for dev in _discover():
+        key = (dev.pid, dev.serial or dev.path)
         seen[key] = {
-            "pid": f"{pid:04x}",
-            "pid_hex": f"0x{pid:04X}",
-            "serial": serial,
-            "product_name": d.get("product_string", ""),
-            "friendly_name": friendly,
-            "firmware": fw,
-            "category": category,
-            "dfu_executor": dfu,
-            "family": family,
-            "usage_page": usage_page,
-            "battery_level": -1,
+            "pid": f"{dev.pid:04x}",
+            "pid_hex": dev.pid_hex,
+            "serial": dev.serial or "",
+            "product_name": dev.product_name or "",
+            "friendly_name": dev.friendly_name or dev.product_name or "",
+            "firmware": dev.firmware_display,
+            "category": dev.category,
+            "dfu_executor": dev.dfu_executor,
+            "family": dev.category or "unknown",
+            "usage_page": dev.usage_page,
+            "battery_level": dev.battery_level,
         }
 
     # Try native bridge for BT/DECT devices

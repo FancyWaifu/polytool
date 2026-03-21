@@ -55,7 +55,7 @@ POLY_VIDS = {
 }
 
 # Vendor-specific HID usage pages used by Poly devices
-VENDOR_USAGE_PAGES = {0xFFA0, 0xFFA2, 0xFF52, 0xFF58}
+VENDOR_USAGE_PAGES = {0xFFA0, 0xFFA2, 0xFF52, 0xFF58, 0xFF99}
 
 # Cloud API endpoints (reverse-engineered from appsettings.json)
 CLOUD_GRAPHQL = "https://api.silica-prod01.io.lens.poly.com/graphql"
