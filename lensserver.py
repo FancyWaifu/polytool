@@ -1317,6 +1317,8 @@ def main():
     parser.add_argument("--dump", action="store_true", help="Dump all messages to dump.jsonl")
     parser.add_argument("--verbose", action="store_true", help="Show all protocol messages and debug output")
     parser.add_argument("--quiet", action="store_true", help="Suppress all output except errors")
+    parser.add_argument("--http", type=int, default=8080, metavar="PORT",
+                        help="HTTP API port (default: 8080, 0 to disable)")
     args = parser.parse_args()
 
     _verbose = args.verbose
@@ -1363,6 +1365,18 @@ def main():
     print(f"  Native bridge: {nb_status}")
     print(f"  Server: 127.0.0.1:{server.port}")
     print(f"  Port file: {PORT_FILE}")
+
+    # Start HTTP API server
+    http_port = args.http
+    httpd = None
+    if http_port:
+        try:
+            from http_api import start_http_api
+            httpd, _ = start_http_api(server, port=http_port)
+            print(f"  HTTP API: http://127.0.0.1:{http_port}/api")
+        except Exception as e:
+            print(f"  HTTP API failed: {e}")
+
     print(f"\n  Waiting for Poly Studio to connect...\n")
 
     try:
