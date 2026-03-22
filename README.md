@@ -12,6 +12,8 @@ Open-source toolkit for managing Poly/Plantronics USB headsets. Drop-in replacem
 - **Fleet Management** — Central PostgreSQL server with agent-based reporting, policy enforcement, and compliance monitoring
 - **Remote Configuration** — Push settings changes to headsets across your network
 - **Interactive Menu** — Terminal UI for all device operations, firmware tools, and protocol debugging
+- **HTTP REST API** — Query devices, settings, battery, and native bridge status via HTTP. Built-in at `localhost:8080/api` — ready for PowerShell, curl, or any HTTP client
+- **Test Suite** — 133 tests (100 unit + 33 integration) covering settings resolution, device identification, protocol parsing, and live API endpoint validation
 - **Protocol Research** — HID probes, DECT settings write protocol discovery, and reverse-engineered documentation
 
 ## Quick Start
@@ -20,10 +22,14 @@ Open-source toolkit for managing Poly/Plantronics USB headsets. Drop-in replacem
 pip install hidapi requests flask
 
 # Start the server — Poly Studio connects automatically
+# HTTP API available at http://localhost:8080/api
 python3 lensserver.py
 
-# Or use verbose mode for debugging
+# Or with verbose mode for debugging
 python3 lensserver.py --verbose
+
+# Custom HTTP API port (or 0 to disable)
+python3 lensserver.py --http 9000
 ```
 
 ## Supported Devices
@@ -48,13 +54,17 @@ Settings for any Poly headset are auto-detected via the native bridge — no man
 
 | File | Description |
 |------|-------------|
-| `lensserver.py` | Drop-in Poly Lens Control Service replacement (TCP server for Poly Studio GUI) |
+| `lensserver.py` | Drop-in Poly Lens Control Service replacement (TCP + HTTP API) |
+| `http_api.py` | REST API server for device queries, settings, and automation |
+| `devices.py` | Device constants, maps, discovery, and PolyDevice dataclass |
+| `firmware.py` | Firmware parsing, cloud API, BladeRunner DFU, updater |
+| `scanner.py` | CLI commands (scan, info, battery, updates, flash, catalog) |
+| `polytool.py` | CLI entry point (re-exports from devices/firmware/scanner) |
 | `native_bridge.py` | Direct ctypes interface to Poly's native dylibs for DECT/BT settings |
 | `lensapi.py` | TCP client for LensServiceApi — query devices, read/write settings, monitor events |
 | `polylens.py` | Web dashboard (Flask) for single-workstation device management |
-| `polytool.py` | CLI for scan, info, battery, updates, flash, catalog |
 | `menu.py` | Interactive terminal menu with device, firmware, and debug submenus |
-| `lens_settings.py` | Settings profiles and API format conversion |
+| `lens_settings.py` | Settings profiles, API format, PREFER_OFFICIAL_SETTINGS flag |
 | `device_settings_db.py` | Canonical settings database from DeviceSettings.zip (217 devices, 72 settings) |
 | `device_settings.py` | Direct HID settings read/write with Poly Studio name translation |
 | `polyserver.py` | Fleet management server (PostgreSQL) |
@@ -63,10 +73,10 @@ Settings for any Poly headset are auto-detected via the native bridge — no man
 | `fwu_flash.py` | Savi DECT firmware flasher (FWU API / CVM mailbox) |
 | `bw_flash.py` | Blackwire 3220 EEPROM flasher (CX2070x S-record) |
 | `device_identity.py` | Device identity preservation during flash |
-| `clockwork_client.py` | Backwards-compatible wrapper around lensapi.py |
 | `polybus.py` | Native PolyBus library interface (ctypes) |
 | `monitor_legacyhost.py` | Poly Lens log file monitor with pattern highlighting |
 | `probes/` | HID protocol research and testing tools |
+| `tests/` | 133 tests (unit + integration) |
 
 ## LensServer — Poly Studio Integration
 
@@ -94,6 +104,57 @@ python3 lensserver.py --dump       # Log all messages to dump.jsonl
 - Call/mute state tracking from native bridge events
 - Product images from Poly Cloud GraphQL API
 - Live hotplug detection via background scanner thread
+- Built-in HTTP REST API for automation and testing
+
+## HTTP REST API
+
+LensServer includes a built-in HTTP API at `http://localhost:8080/api` for querying devices, settings, and server status. No additional dependencies required.
+
+```bash
+# List all devices
+curl http://localhost:8080/api/devices
+
+# Get settings for a device (by ID, prefix, or name)
+curl http://localhost:8080/api/devices/Blackwire/settings
+curl http://localhost:8080/api/devices/047fc056/settings
+
+# Write a setting
+curl -X POST http://localhost:8080/api/devices/047fc056/settings \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Dialtone On/Off", "value": false}'
+
+# Server health
+curl http://localhost:8080/api/health
+
+# Native bridge status
+curl http://localhost:8080/api/native-bridge
+```
+
+**PowerShell:**
+```powershell
+# List devices
+Invoke-RestMethod http://localhost:8080/api/devices
+
+# Get settings
+Invoke-RestMethod http://localhost:8080/api/devices/Blackwire/settings
+
+# Write a setting
+Invoke-RestMethod -Method Post -Uri http://localhost:8080/api/devices/047fc056/settings `
+  -Body '{"name":"Dialtone On/Off","value":false}' -ContentType application/json
+```
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Server status, uptime, device/client counts |
+| `/api/devices` | GET | List all connected devices |
+| `/api/devices/:id` | GET | Device detail (by ID, prefix, or name match) |
+| `/api/devices/:id/settings` | GET | Full settings with metadata and values |
+| `/api/devices/:id/settings` | POST | Write a setting `{name, value}` |
+| `/api/devices/:id/battery` | GET | Battery status |
+| `/api/devices/:id/dfu` | GET | Firmware update status |
+| `/api/devices/:id` | DELETE | Remove/forget a device |
+| `/api/settings/profiles` | GET | Settings profiles and zip database info |
+| `/api/native-bridge` | GET | Native bridge status and devices |
 
 ## Native Bridge
 
@@ -252,8 +313,12 @@ python3 probes/dect_settings_probe.py --test scan_cmds   # Scan CVM command fami
 polytool/
 │
 │── # ─── Core Server & CLI ───────────────────────────
-├── lensserver.py            # Drop-in LensService replacement (Poly Studio integration)
-├── polytool.py              # Main CLI (scan, info, battery, updates, flash, catalog)
+├── lensserver.py            # Drop-in LensService replacement (TCP + HTTP API)
+├── http_api.py              # REST API server (devices, settings, battery, native bridge)
+├── polytool.py              # CLI entry point (re-exports from devices/firmware/scanner)
+├── devices.py               # Device constants, maps, discovery, PolyDevice dataclass
+├── firmware.py              # Firmware parsing, cloud API, BladeRunner DFU, updater
+├── scanner.py               # CLI commands (scan, info, battery, updates, flash, catalog)
 ├── menu.py                  # Interactive terminal menu
 ├── lensapi.py               # LensServiceApi TCP client
 │
@@ -301,11 +366,39 @@ polytool/
 │   ├── dect_settings_probe.py   # DECT settings write probe
 │   └── hid_helpers.py           # Shared HID utilities
 │
+│── # ─── Tests ────────────────────────────────────────
+├── tests/
+│   ├── test_devices.py          # Device ID, version normalization, DFU maps
+│   ├── test_settings.py         # Settings profiles, API format, value translation
+│   ├── test_protocol.py         # LensServiceApi protocol constants, handlers
+│   ├── test_device_settings_db.py  # Zip database loading, setting corrections
+│   └── test_http_api.py         # Integration tests against running server
+│
 │── # ─── Documentation ───────────────────────────────
 ├── RE_FINDINGS.txt          # Reverse engineering findings
 ├── CLAUDE.md                # Claude Code project context
 └── README.md
 ```
+
+## Testing
+
+```bash
+# Run unit tests (no server needed)
+python3 -m unittest discover tests/ -v
+
+# Run integration tests (requires running lensserver with --http)
+python3 -m unittest tests.test_http_api -v
+
+# Run all tests
+python3 -m unittest discover tests/ -v
+```
+
+133 tests covering:
+- **Device identification** — version normalization, DFU executor mapping, codename lookups, PID maps
+- **Settings resolution** — family detection, per-PID profiles, API format with meta objects, value translation
+- **Protocol** — SOH delimiter, API version, all 19 LensServiceApi message handlers
+- **Settings database** — zip loading, setting name corrections, choice validation, hex normalization
+- **HTTP API** — all 10 endpoints against live devices (health, devices, settings, battery, DFU, native bridge, error handling)
 
 ## Requirements
 
