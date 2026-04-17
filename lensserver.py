@@ -829,14 +829,61 @@ class LensServer:
         }
 
     def on_get_software_update(self, msg, client_sock):
+        """Handle GetAvailableSoftwareUpdate - Poly Studio uses this to
+        decide whether to render the 'Update Available' button on a
+        device card AND for app self-update checks.
+
+        Two callers, distinguished by which fields are present:
+          - App self-update:    component='lens-desktop-windows' (no deviceId)
+          - Device firmware:    deviceId set, component may be 'firmware'
+
+        We always return empty for app updates (we're not Poly Lens, no
+        self-update). For device firmware we route through the same
+        cloud check on_get_dfu_status uses, so the button appears when
+        a real update exists in Poly's catalog.
+        """
+        device_id = msg.get("deviceId", "")
+        component = msg.get("component", "")
+        _log(f"  GetAvailableSoftwareUpdate device={device_id!r} "
+             f"component={component!r}", verbose_only=True)
+
+        # App self-update query - always say "no update" since we're not
+        # the Lens desktop app.
+        if not device_id:
+            return {
+                "type": "AvailableSoftwareUpdate",
+                "apiVersion": API_VERSION,
+                "availableVersion": "",
+                "currentVersion": "",
+                "statuses": [],
+                "canPostpone": False,
+                "component": component,
+            }
+
+        # Device firmware query - reuse the cached DFU status from
+        # on_get_dfu_status. Pre-warm if we haven't checked yet.
+        if device_id not in self._dfu_cache:
+            self._dfu_cache[device_id] = self._check_firmware_update(device_id)
+        cached = self._dfu_cache[device_id]
+        statuses = cached.get("statuses", [])
+        latest = cached.get("version", "")
+
+        # Pull current firmware version from the device record so Studio
+        # can show "v1065 -> v1082" in the update prompt.
+        with self._lock:
+            dev = self.devices.get(device_id, {})
+        current = dev.get("firmwareVersion", "")
+
         return {
             "type": "AvailableSoftwareUpdate",
             "apiVersion": API_VERSION,
-            "availableVersion": "",
-            "currentVersion": "",
-            "statuses": [],
-            "canPostpone": False,
-            "component": msg.get("component", ""),
+            "deviceId": device_id,
+            "availableVersion": latest,
+            "currentVersion": current,
+            "statuses": statuses,
+            "canPostpone": True,
+            "component": component or "firmware",
+            "releaseNoteUrl": cached.get("releaseNoteUrl", ""),
         }
 
     def on_slew_device_setting(self, msg, client_sock):
