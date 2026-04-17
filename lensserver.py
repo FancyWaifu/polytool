@@ -702,7 +702,12 @@ class LensServer:
 
         try:
             import requests
-            query = '''query ($pid: String!) {
+            # The Poly cloud schema requires `pid: ID!`. Using `String!`
+            # parses successfully but always returns null for the bundle —
+            # which used to suppress the "Update Available" button in Poly
+            # Studio for every device, since lensserver would silently
+            # report AvailableFirmwareVersionEqual on the empty response.
+            query = '''query ($pid: ID!) {
               availableProductSoftwareByPid(pid: $pid) {
                 version
                 publishDate
