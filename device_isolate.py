@@ -27,6 +27,7 @@ import ctypes
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 
 def _ps(cmd: str, timeout: int = 30) -> str:
@@ -264,6 +265,19 @@ def isolate(target_serial: str, vid: int, pid: int, log=print):
 
 _LCS_SERVICE_NAME = "Poly Lens Control Service"
 
+# These are launched at user logon by HKCU Run entries:
+#   com.poly.lens.client.watchdog.lh = ProcessWatchdog wrapping LegacyHost.exe
+#   com.poly.lens.client.watchdog.cc = ProcessWatchdog wrapping CallControlApp
+# We have to kill them during isolation (they hold HID handles), and we
+# have to relaunch them afterwards or the user is left with a broken Poly
+# Studio until next logon — Studio shows zero devices because LegacyHost
+# (which manages DECT/Voyager) is dead and nothing respawns it.
+_WATCHDOG_EXE = r"C:\Program Files\Poly\Poly Studio\ProcessWatchdog\PolyLensProcessWatchdog.exe"
+_WATCHED_TARGETS = [
+    r"C:\Program Files\Poly\Poly Studio\LegacyHost\LegacyHost.exe",
+    r"C:\Program Files\Poly\Poly Studio\CallControlApp\PolyLensCallControlApp.exe",
+]
+
 
 def _stop_lcs(log=print) -> bool:
     """Stop the Poly LCS service so it releases its HID handles. Also
@@ -281,9 +295,9 @@ def _stop_lcs(log=print) -> bool:
         subprocess.run(["net.exe", "stop", _LCS_SERVICE_NAME],
                        capture_output=True, text=True, timeout=30)
 
-    # Belt-and-suspenders: kill any Poly children that may still be alive
-    # (LegacyHost is normally a child of LCS but can be spawned standalone;
-    # CallControlApp and the watchdog also hold handles).
+    # Belt-and-suspenders: kill any Poly children that may still be alive.
+    # The watchdog must be killed too — otherwise it'll respawn LegacyHost
+    # while we're trying to disable HID children.
     for proc in ("LegacyHost.exe", "PolyLensCallControlApp.exe",
                  "PolyLensProcessWatchdog.exe"):
         subprocess.run(["taskkill.exe", "/F", "/IM", proc],
@@ -292,14 +306,39 @@ def _stop_lcs(log=print) -> bool:
 
 
 def _start_lcs(log=print) -> None:
-    """Restart the Poly LCS service. Best-effort — failure is logged but
-    not raised because we're in a finally block."""
+    """Restart the Poly LCS service AND the user-session watchdogs that
+    keep LegacyHost / CallControlApp alive. Best-effort — failures logged
+    but never raised because we run in a finally block.
+
+    The watchdog relaunch is what makes Poly Studio (running standalone,
+    no polytool/lensserver involved) see devices again. Skipping it leaves
+    the user with a broken Studio until the next logon."""
     log("  isolate: restarting Poly Lens Control Service...")
     r = subprocess.run(["net.exe", "start", _LCS_SERVICE_NAME],
                        capture_output=True, text=True, timeout=30)
     if r.returncode != 0:
         log(f"  isolate: WARNING - LCS restart failed: "
             f"{(r.stderr or r.stdout).strip()[:100]}")
+
+    # Relaunch the per-user watchdogs (each watchdog respawns its target
+    # if the target dies). DETACHED_PROCESS so they outlive polytool.
+    if not Path(_WATCHDOG_EXE).exists():
+        return
+    DETACHED = 0x00000008
+    for target in _WATCHED_TARGETS:
+        if not Path(target).exists():
+            continue
+        try:
+            subprocess.Popen(
+                [_WATCHDOG_EXE, target],
+                creationflags=DETACHED,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                close_fds=True,
+            )
+        except Exception as e:
+            log(f"  isolate: WARNING - watchdog spawn failed for "
+                f"{Path(target).name}: {e}")
+    log("  isolate: watchdogs relaunched (LegacyHost + CallControlApp)")
 
 
 __all__ = [
