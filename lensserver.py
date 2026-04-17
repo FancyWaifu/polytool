@@ -1146,8 +1146,23 @@ class LensServer:
 
             try:
                 _log("  DFU: running LegacyDfu (this can take several minutes)")
+                # Throttle pushes - LegacyDfu emits progress every ~2s but
+                # also fires NOTIFY_PROGRESS many times per second during
+                # some phases. Push to Studio at most once per percent so
+                # we don't flood the SOH socket.
+                last_pct = [-1]
+                def _on_progress(pct, phase, message):
+                    if pct == last_pct[0]:
+                        return
+                    last_pct[0] = pct
+                    self._push_dfu_status(
+                        client_sock, device_id, request_id,
+                        "InProgress", progress=pct,
+                        dl_status="Completed",
+                    )
                 result = install_bundle(
                     zip_path=path, vid=vid, pid=pid, serial=serial, log=_log,
+                    progress_cb=_on_progress,
                 )
             finally:
                 if paused:

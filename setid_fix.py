@@ -251,14 +251,19 @@ def build_setid_bundle(pid_hex, version, out_path):
 
 # ── Execution ────────────────────────────────────────────────────────────────
 
-def run_legacy_dfu(zip_path, vid, pid, serial, timeout=120):
+def run_legacy_dfu(zip_path, vid, pid, serial, timeout=120, progress_cb=None):
     """Invoke LegacyDfu.exe against the bundle. Returns (success, output).
 
     success means the process exited 0 AND output contains "DFU Complete: 100".
+
+    progress_cb (optional): callable invoked with (percentage:int, phase:str,
+    message:str) for every progress event LegacyDfu emits. Used by lensserver
+    to stream DfuExecutionStatus events back to Poly Studio so its progress
+    bar stays alive instead of timing out and reverting to the Update button.
     """
     exe = find_legacy_dfu()
     if not exe:
-        return False, "LegacyDfu.exe not found — install Poly Lens Control Service"
+        return False, "LegacyDfu.exe not found - install Poly Lens Control Service"
 
     cmd = [
         str(exe),
@@ -270,13 +275,63 @@ def run_legacy_dfu(zip_path, vid, pid, serial, timeout=120):
         "--ignore_version_check",
         "--loglevel", "3",
     ]
+
+    if progress_cb is None:
+        # Simple synchronous mode - no streaming needed
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            out = (r.stdout or "") + (r.stderr or "")
+            ok = r.returncode == 0 and "DFU Complete:   100" in out
+            return ok, out
+        except subprocess.TimeoutExpired:
+            return False, f"LegacyDfu timed out after {timeout}s"
+
+    # Streaming mode: pipe stdout line-by-line, parse progress events,
+    # invoke the callback. LegacyDfu emits two relevant line patterns:
+    #   "DFU Complete:   42 %"        - overall progress
+    #   "Received message through pipe: {...,\"phase\":\"transfer\",
+    #    \"percentage\":42,...}"      - more granular per-component
+    output_lines = []
+    deadline = time.time() + timeout
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        out = (r.stdout or "") + (r.stderr or "")
-        ok = r.returncode == 0 and "DFU Complete:   100" in out
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                text=True, bufsize=1)
+        try:
+            for line in proc.stdout:
+                output_lines.append(line)
+                if time.time() > deadline:
+                    proc.kill()
+                    return False, "".join(output_lines) + "\n[timed out]"
+                # Parse "DFU Complete:   NN %"
+                m = re.search(r"DFU Complete:\s+(\d+)\s*%", line)
+                if m:
+                    pct = int(m.group(1))
+                    try:
+                        progress_cb(pct, "transfer", f"DFU Complete: {pct}%")
+                    except Exception:
+                        pass
+                    continue
+                # Parse NOTIFY_PROGRESS JSON {"phase":"...","percentage":N}
+                m2 = re.search(
+                    r'"phase"\s*:\s*"([^"]+)"[^}]*"percentage"\s*:\s*(\d+)',
+                    line)
+                if m2:
+                    phase = m2.group(1)
+                    pct = int(m2.group(2))
+                    try:
+                        progress_cb(pct, phase, line.strip()[:120])
+                    except Exception:
+                        pass
+            rc = proc.wait(timeout=max(1, deadline - time.time()))
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+        out = "".join(output_lines)
+        ok = rc == 0 and "DFU Complete:   100" in out
         return ok, out
     except subprocess.TimeoutExpired:
-        return False, f"LegacyDfu timed out after {timeout}s"
+        return False, "".join(output_lines) + "\n[timed out]"
 
 
 # ── High-level workflow ─────────────────────────────────────────────────────
@@ -416,7 +471,7 @@ def cmd_fix_setid(args):
 # ── Full bundle install (real firmware update via LegacyDfu) ────────────────
 
 def install_bundle(zip_path, vid, pid, serial, timeout=900,
-                   isolate_siblings=True, log=print):
+                   isolate_siblings=True, log=print, progress_cb=None):
     """Install a real firmware bundle .zip via LegacyDfu + LegacyHost.
 
     Same plumbing as fix_setid() but with a real cloud bundle (not forged).
@@ -451,7 +506,9 @@ def install_bundle(zip_path, vid, pid, serial, timeout=900,
             return {"success": False,
                     "message": "LegacyHost.exe could not start or DFU pipe never appeared"}
         log("LegacyHost DFU pipe is up")
-        ok, output = run_legacy_dfu(zip_path, vid, pid, serial, timeout=timeout)
+        ok, output = run_legacy_dfu(
+            zip_path, vid, pid, serial, timeout=timeout, progress_cb=progress_cb,
+        )
 
     if ok:
         return {"success": True,
