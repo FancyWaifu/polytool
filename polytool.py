@@ -64,6 +64,11 @@ from scanner import (
 
 from setid_fix import cmd_fix_setid, cmd_update_legacy, DEFAULT_SETID
 
+from service import (
+    cmd_install_service, cmd_uninstall_service,
+    cmd_service_status, cmd_service_start, cmd_service_stop,
+)
+
 
 # ── Main Entry Point ─────────────────────────────────────────────────────────
 
@@ -147,6 +152,32 @@ def main():
     upl_parser.add_argument("--verbose", action="store_true",
                             help="Print full LegacyDfu output on failure")
 
+    # install-service / uninstall-service / service-status / service-start / service-stop
+    inst_parser = subparsers.add_parser(
+        "install-service",
+        help="Register lensserver.py to auto-start at user logon "
+             "(makes regular Poly Studio show distinguishable names + firmware versions)",
+    )
+    inst_parser.add_argument("--force", action="store_true",
+                             help="Replace any existing scheduled task")
+
+    subparsers.add_parser(
+        "uninstall-service",
+        help="Remove the auto-start scheduled task (reverts to stock LCS)",
+    )
+    subparsers.add_parser(
+        "service-status",
+        help="Show whether the lensserver auto-start task is installed/running",
+    )
+    subparsers.add_parser(
+        "service-start",
+        help="Start lensserver right now (without waiting for next logon)",
+    )
+    subparsers.add_parser(
+        "service-stop",
+        help="Stop the running lensserver and end the scheduled task",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -167,6 +198,11 @@ def main():
         "fwinfo": cmd_fwinfo,
         "fix-setid": cmd_fix_setid,
         "update-legacy": cmd_update_legacy,
+        "install-service": cmd_install_service,
+        "uninstall-service": cmd_uninstall_service,
+        "service-status": cmd_service_status,
+        "service-start": cmd_service_start,
+        "service-stop": cmd_service_stop,
     }
 
     cmd_func = commands.get(args.command)

@@ -73,6 +73,21 @@ def _sanitize_firmware_components(fw):
     return cleaned
 
 
+def _comp(dev, key):
+    """Read a per-component firmware version from the device's
+    `firmware_components` dict (populated by polytool's LCS-cache hydrator).
+    Returns the dotted form ('10.82', '0.0.2134.3260', ...) or '' when
+    nothing is known. Empty string means "don't display this slot."""
+    try:
+        from devices import _format_component_version
+    except ImportError:
+        return ""
+    raw = (dev.firmware_components or {}).get(key, "")
+    if not raw:
+        return ""
+    return _format_component_version(raw)
+
+
 MSG_DELIM = "\x01"  # SOH byte — real LensService message separator (NOT newline)
 
 # Port file location (platform-specific)
@@ -1093,19 +1108,24 @@ class LensServer:
                 if already_exists:
                     continue
 
+                # Use display_name (which appends the tattoo serial when two
+                # devices share a product name) so Poly Studio shows them as
+                # distinguishable cards instead of identical "Poly Savi 7300
+                # Office Series" twins.
+                disp_name = dev.display_name or dev.friendly_name or dev.product_name
                 new_device = {
                     # camelCase — matches .NET JsonSerializer default naming
                     "deviceId": device_id,
                     "parentId": "",
-                    "productName": dev.friendly_name or dev.product_name,
-                    "systemName": dev.product_name,
-                    "deviceName": dev.product_name,
+                    "productName": disp_name,
+                    "systemName": disp_name,
+                    "deviceName": disp_name,
                     "manufacturerName": dev.manufacturer or "Plantronics",
-                    "displaySerialNumber": dev.serial or "",
+                    "displaySerialNumber": dev.tattoo_serial or dev.serial or "",
                     "buildCode": "",
                     "firmwareVersion": dev.firmware_display,
                     "serialNumber": dev.serial or "",
-                    "tattooSerialNumber": dev.serial or "",
+                    "tattooSerialNumber": dev.tattoo_serial or dev.serial or "",
                     "deviceType": (dev.category or "headset").capitalize(),
                     "connected": True,
                     "attached": True,
@@ -1115,19 +1135,23 @@ class LensServer:
                     "macAddress": "",
                     "bluetoothAddress": "",
                     "hardwareRevision": "",
-                    "headsetVersion": dev.firmware_display,
-                    "baseVersion": "",
-                    "usbVersion": dev.firmware_display,
+                    # Per-component versions: prefer the LCS-cache values
+                    # (DECT base + headset have different firmware so usb !=
+                    # headset). Fall back to firmware_display when nothing
+                    # better is known.
+                    "headsetVersion": _comp(dev, "headset") or dev.firmware_display,
+                    "baseVersion": _comp(dev, "base"),
+                    "usbVersion": _comp(dev, "usb") or dev.firmware_display,
                     "firmwareComponents": {
-                        "usbVersion": dev.firmware_display,
-                        "baseVersion": "",
-                        "tuningVersion": "",
-                        "picVersion": "",
-                        "cameraVersion": "",
-                        "headsetVersion": "",
+                        "usbVersion": _comp(dev, "usb") or dev.firmware_display,
+                        "baseVersion": _comp(dev, "base"),
+                        "tuningVersion": _comp(dev, "tuning"),
+                        "picVersion": _comp(dev, "pic"),
+                        "cameraVersion": _comp(dev, "camera"),
+                        "headsetVersion": _comp(dev, "headset"),
                         "headsetLanguageVersion": "",
-                        "bluetoothVersion": "",
-                        "setIdVersion": "",
+                        "bluetoothVersion": _comp(dev, "bluetooth"),
+                        "setIdVersion": _comp(dev, "setid"),
                     },
                     "peerDevices": [],
                     "connectionType": "USB",

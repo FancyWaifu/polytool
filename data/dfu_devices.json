@@ -1,0 +1,4808 @@
+{
+  "0006": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "M1100 Original",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0100": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "M1100 Verizon",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0101": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "M1100 Rest of World",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0104": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "M1100 US",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0106": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "Voyager Pro UC",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0107": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "Voyager Pro Standard",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0108": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "Voyager Pro Verizon",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0109": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "Voyager Pro Rest of World",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "010a": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "Blue Pacific C720",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "010b": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "Blue Pacific C720M",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "010c": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "Blue Pacific C710",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "010d": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "Blue Pacific C710M",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "010e": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "M1100 BMW",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0113": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "HSLanguage": "BTDeviceDFU",
+      "HSOTA": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "Language": "BTDeviceDFU",
+      "LanguageOTA": "BTDeviceDFU",
+      "PIC": "BTDeviceDFU",
+      "Tuning": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0114": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0115": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU",
+      "USB": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0117": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0118": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0119": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "011a": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "Headset": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "011b": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "011c": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "Headset": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "011d": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "011e": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "011f": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0120": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0121": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0122": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0123": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0124": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0125": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0127": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu"
+    },
+    "name": "Voyager Focus",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0129": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "012a": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "012e": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0130": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU",
+      "USB": "CsrHidDfu"
+    },
+    "name": "Voyager 5200 US/North America",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0132": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 5200 Verizon",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0133": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 5200 China",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0134": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 5200 Rest Of World",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0135": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 5200 India",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0137": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "Headset": "CsrHidDfu"
+    },
+    "name": "Nirvana Blur US",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0138": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "Headset": "CsrHidDfu"
+    },
+    "name": "Nirvana Blur UK",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0139": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "013a": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "013b": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "013c": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0140": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 3200 US",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0141": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 3200 China",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0142": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 3200 Rest of World",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0143": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 3200 India",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0146": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0147": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU",
+      "USB": "CsrHidDfu"
+    },
+    "name": "Voyager 8200/9XX",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "014b": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "LanguageOTA": "MorpheusDFU",
+      "USB": "CsrHidDfu"
+    },
+    "name": "Calisto 6XX",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "014c": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "LanguageOTA": "MorpheusDFU",
+      "USB": "CsrHidDfu"
+    },
+    "name": "Calisto 3200",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "014d": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "LanguageOTA": "MorpheusDFU",
+      "USB": "CsrHidDfu"
+    },
+    "name": "Voyager 4220 UC",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "014e": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "LanguageOTA": "MorpheusDFU",
+      "USB": "CsrHidDfu"
+    },
+    "name": "Voyager 4210 UC",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0151": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU",
+      "USB": "CsrHidDfu"
+    },
+    "name": "Voyager 8200",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0152": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU",
+      "USB": "CsrHidDfu"
+    },
+    "name": "Voyager 6200",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0154": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Penguin",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0155": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "Squirrel",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0156": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 4220 New",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0157": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 4210 New",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0158": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "MorpheusDFU",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Sandpiper",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0159": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "Headset": "CsrHidDfu",
+      "Language": "CsrHidDfu",
+      "LanguageOTA": "MorpheusDFU"
+    },
+    "name": "Voyager 6200 BLE",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "015a": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "Calisto 5300",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "015b": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "Squirrel BT",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0160": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Gorilla Huddle (non-Teams)",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0161": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Gorilla Huddle (Teams)",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0162": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Penguin Stand",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0167": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Heron Stereo Teams",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0168": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Heron Stereo non-Teams",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0169": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Heron Stereo docked",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "016a": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Heron Mono Teams",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "016b": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Heron Mono non-Teams",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "016c": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Heron Mono docked",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "016e": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Lark",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "016f": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Lark 'docked'",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0171": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Chimp",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0172": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Osprey/Voyager Z60+ UC Case",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0173": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Voyager 5200",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0174": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Voyager Legend",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0175": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Chronos-Prototype Stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0176": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Chronos-Prototype Stereo docked",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0177": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Chronos-Prototype Mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0178": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Chronos-Prototype Mono docked",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "017c": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Lark",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "017d": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Flamingo Earbuds",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "017e": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Flamingo Prosumer SKU",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "017f": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Lark 5181",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0180": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Peregrine 5181",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "01c2": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Dolphin 3 Mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02c0": {
+    "corruptPid": "FFFE",
+    "corruptVid": "03F0",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Falcon Charge Stand",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02c2": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Dolphin 3 Stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02e4": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Beetle Teams",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02e5": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Beetle",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02ea": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "Chickadee",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02eb": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "Chickadee",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02ec": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "Chickadee",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02ed": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT600 BLE",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02ee": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT600 BLE",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02ef": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT600 BLE",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02f2": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT900",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02f3": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT900",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02f4": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT900",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02f5": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT900",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02f6": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT600",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02f7": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT600",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02fa": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT600/Cydoemus 2",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02fb": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT600/Cydoemus 2",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "02fc": {
+    "corruptPid": "fffe",
+    "corruptVid": "047f",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT600/Cydoemus 2",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "03c2": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Dolphin 4 Mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0410": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0413": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0414": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0415": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0416": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0417": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "0418": {
+    "corruptPid": "00ff",
+    "corruptVid": "047f",
+    "handlers": {
+      "BC05": "BTDeviceDFU",
+      "Base": "BTDeviceDFU",
+      "Headset": "BTDeviceDFU",
+      "USB": "BTDeviceDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "04c2": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Dolphin 4 Stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "04c8": {
+    "corruptPid": "FFFE",
+    "corruptVid": "03F0",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Falcon Grey Stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "05c2": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Dolphin 6 Stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "05c5": {
+    "corruptPid": "FFFE",
+    "corruptVid": "03F0",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Falcon Basic Charge Stand",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "05c8": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Dolphin 3+ Stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "06c5": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Dolphin 6 Mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "06c8": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Dolphin 3+ Mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0bbf": {
+    "corruptPid": "FFFE",
+    "corruptVid": "03F0",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Falcon Mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0cbf": {
+    "corruptPid": "FFFE",
+    "corruptVid": "03F0",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Falcon Boom",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0dbf": {
+    "corruptPid": "FFFE",
+    "corruptVid": "03F0",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Falcon Fold",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "0dc2": {
+    "corruptPid": "FFFE",
+    "corruptVid": "03F0",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Waves",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "1200": {
+    "corruptPid": "ff75",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "AntmanDFU"
+    },
+    "name": "Antman",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "3001": {
+    "corruptPid": "3002",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Eagle Eye Mini",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "4300": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "siPad test app",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4302": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "MDA5XX stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4303": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "MDA5XX mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4304": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "BW7XX",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4305": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "BW4XX ANC",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4306": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "BW4XX NO ANC",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "430a": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Manatee Stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "430b": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Manatee Mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "430c": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Manatee 35 Stereo ",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "430d": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Manatee 35 Mono ",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "430e": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Fox Stereo ",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "430f": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Fox Mono ",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4311": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Manatee Stereo Teams",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4312": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Manatee Mono Teams",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4313": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Manatee 35 Stereo Teams",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4314": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Manatee 35 Mono Teams",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4315": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Salmon",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4317": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Salmon Teams",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "4319": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "ULCC-Manatee",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "431a": {
+    "corruptPid": "9299",
+    "corruptVid": "095D",
+    "handlers": {
+      "Base": "TIDFU",
+      "Camera": "USBDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "HotShot-Manatee",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "431b": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Mantis DA75",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "431c": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Mantis DA85 (self-detect Teams)",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "431d": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Mantis HW515 (self-detect Teams)",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "431e": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Mantis HW525 (self-detect Teams)",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "431f": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "Mantis HW545",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "43fb": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "siPad Stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "43fc": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "siPad Mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "43fe": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "siPad Two Mic",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "43ff": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "siPad Four Mic",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "714a": {
+    "corruptPid": "714B",
+    "corruptVid": "03F0",
+    "handlers": {
+      "USB": "HPDFU"
+    },
+    "name": "HP 620/625 Webcam",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "760": {
+    "corruptPid": "761",
+    "corruptVid": "03F0",
+    "handlers": {
+      "USB": "HPDFU"
+    },
+    "name": "HP 920/925 Webcam",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "794a": {
+    "corruptPid": "0B12",
+    "corruptVid": "1BCF",
+    "handlers": {
+      "USB": "HPDFU"
+    },
+    "name": "HP 430/435 Webcam",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "8201": {
+    "corruptPid": "fffe",
+    "corruptVid": "413C",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT100",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "8202": {
+    "corruptPid": "fffe",
+    "corruptVid": "413C",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT100",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "8203": {
+    "corruptPid": "fffe",
+    "corruptVid": "413C",
+    "handlers": {
+      "USB": "CsrHidDfu"
+    },
+    "name": "BT100",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "9212": {
+    "corruptPid": "9213",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Eagle Eye Cube",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "9217": {
+    "corruptPid": "9218",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Eagle Eye Cube",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "9290": {
+    "corruptPid": "9291",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Poly Studio P15 webcam",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "9296": {
+    "corruptPid": "9297",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Poly Studio P5 webcam ",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "9298": {
+    "corruptPid": "9299",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Poly Studio P21 webcam ",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "929c": {
+    "corruptPid": "929D",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Poly Studio P10 webcam ",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "92a1": {
+    "corruptPid": "92A2",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Poly Studio Mercury webcam ",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "92ab": {
+    "corruptPid": "92AC",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Poly Studio P6 webcam ",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "92b2": {
+    "corruptPid": "92b3",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Poly Studio R30 webcam ",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "92b4": {
+    "corruptPid": "92b3",
+    "corruptVid": "095D",
+    "handlers": {
+      "USB": "USBDFU"
+    },
+    "name": "Poly Studio R30 NR webcam ",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "a511": {
+    "corruptPid": "fffe",
+    "corruptVid": "413C",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu"
+    },
+    "name": "WH7022",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "a512": {
+    "corruptPid": "FFFE",
+    "corruptVid": "413C",
+    "handlers": {
+      "HSLanguage": "CsrHidDfu",
+      "HSOTA": "MorpheusDFU",
+      "LanguageOTA": "MorpheusDFU",
+      "USB": "CsrHidDfu"
+    },
+    "name": "WH5022",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "a513": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "Language": "TIDFU",
+      "SetID": "SetID",
+      "USB": "TIDFU"
+    },
+    "name": "WH3022",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "a900": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "a901": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "a9ff": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "aa00": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa01": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa02": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa03": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa04": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa05": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa06": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa07": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa08": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa09": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa0a": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa0b": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa0c": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa0d": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa0e": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa0f": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa12": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa13": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa14": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa15": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa18": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa19": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa1a": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "aa1b": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "USB": "PnxDFU"
+    },
+    "name": "Pacfico 40",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab01": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Tuning": "FwuTuningDFU",
+      "USB": "PnxDFU"
+    },
+    "name": "Yeti",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab02": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Tuning": "FwuTuningDFU",
+      "USB": "PnxDFU"
+    },
+    "name": "Yeti",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab03": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Paeon Mono",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab04": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Paeon Stereo",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab05": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Paeon Legacy Mono",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab06": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Puma Jaguar Mono",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab07": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Puma Jaguar Stereo",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab08": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Puma Lynx Mono",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab09": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Puma Yen Mono",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab0a": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Puma Yen Stereo",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab11": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Tuning": "FwuTuningDFU",
+      "USB": "PnxDFU"
+    },
+    "name": "Yeti",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ab12": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Tuning": "FwuTuningDFU",
+      "USB": "PnxDFU"
+    },
+    "name": "Yeti",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac01": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Tuning": "FwuTuningDFU",
+      "USB": "PnxDFU"
+    },
+    "name": "Poseidon I/II",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac11": {
+    "corruptPid": "ACED",
+    "corruptVid": "04CC",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Tuning": "FwuTuningDFU",
+      "USB": "PnxDFU"
+    },
+    "name": "Poseidon I/II",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac20": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Seirenes",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac21": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuTuningDFU"
+    },
+    "name": "Seirenes",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac22": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Seirenes",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac24": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Savi 7210 CD",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac25": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Savi 8310",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac26": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Savi 8320",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac27": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Savi 7310",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac28": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Savi 7320",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac29": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Seirenes VOL",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac2a": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuTuningDFU"
+    },
+    "name": "Seirenes Legacy VOL",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac2b": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Savi x40",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac30": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Jaguar Mono base with Lynx top",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac31": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Seirenes VOL",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac32": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuTuningDFU"
+    },
+    "name": "Seirenes Legacy VOL",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac33": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Savi x40",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac34": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Panther w/ Jaguar Mono Top",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac35": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Panther w/ Jaguar Stereo Top",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac36": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Panther w/ Lynx Mono Top",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac37": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Panther w/ Yen Mono/X40 Top",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac38": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "SetID": "SetID",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Panther w/ Yen Stereo Top",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac39": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Seirenes VOL",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ac3a": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuTuningDFU"
+    },
+    "name": "Seirenes Legacy VOL",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ac3b": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "BC05DFU",
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Savi x40",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "acfc": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Jaguar Headset Mono",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "acfd": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "PIC": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Jaguar Headset Stereo",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "acfe": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Yen Mono / W8210T",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "acff": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "FwuApiDFU",
+      "Headset": "FwuApiDFU",
+      "Language": "FwuApiDFU",
+      "Tuning": "FwuApiDFU"
+    },
+    "name": "Yen Stereo / W8220T",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ad03": {
+    "corruptPid": "AD02",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "RomeDFU"
+    },
+    "name": "Rome",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ad04": {
+    "corruptPid": "AD02",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "RomeDFU"
+    },
+    "name": "Rome",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ad05": {
+    "corruptPid": "AD02",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "RomeDFU"
+    },
+    "name": "MDA400 QD",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ae01": {
+    "corruptPid": "AE00",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "LatteDFU"
+    },
+    "name": "Latte",
+    "supportedOs": [
+      "win"
+    ]
+  },
+  "ae02": {
+    "corruptPid": "AEFF",
+    "corruptVid": "047F",
+    "handlers": {
+      "BC05": "CinnamonFlashDFU",
+      "Base": "CinnamonTM4CDFU",
+      "Language": "CinnamonEEPROMDFU",
+      "USB": "CinnamonDCXDFU"
+    },
+    "name": "Cinnamon/Calisto P340",
+    "supportedOs": [
+      "win"
+    ]
+  },
+  "ae03": {
+    "corruptPid": "AEFF",
+    "corruptVid": "047F",
+    "handlers": {
+      "BC05": "CinnamonFlashDFU",
+      "Base": "CinnamonTM4CDFU",
+      "Language": "CinnamonEEPROMDFU",
+      "USB": "CinnamonDCXDFU"
+    },
+    "name": "Cinnamon/Calisto P340",
+    "supportedOs": [
+      "win"
+    ]
+  },
+  "ae04": {
+    "corruptPid": "AE00",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "LatteDFU"
+    },
+    "name": "Latte",
+    "supportedOs": [
+      "win"
+    ]
+  },
+  "ae10": {
+    "corruptPid": "AE00",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "LatteDFU"
+    },
+    "name": "Latte",
+    "supportedOs": [
+      "win"
+    ]
+  },
+  "ae11": {
+    "corruptPid": "AE00",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "LatteDFU"
+    },
+    "name": "Latte",
+    "supportedOs": [
+      "win"
+    ]
+  },
+  "aeff": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "BC05": "CinnamonFlashDFU",
+      "Base": "CinnamonTM4CDFU",
+      "Language": "CinnamonEEPROMDFU",
+      "USB": "CinnamonDCXDFU"
+    },
+    "name": "Cinnamon",
+    "supportedOs": [
+      "win"
+    ]
+  },
+  "af00": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "DA70",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af01": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "DA80",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af02": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "DA90",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af03": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af04": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af05": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af06": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af07": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af08": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af09": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af0b": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af0c": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af0d": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "aaa",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "af0e": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "Base": "TIDFU",
+      "SetID": "SetID",
+      "Tuning": "DSPTuningDFU",
+      "USB": "TIDFU"
+    },
+    "name": "DA70-UC",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "b01a": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Osprey/Voyager Z60+ UC Earbuds",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "b024": {
+    "corruptPid": "FFFE",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Emu/Voyager 20 UC Earbuds",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c00e": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C310",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c00f": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C320",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c015": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C510",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c016": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C510",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c017": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C520",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c018": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C520",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c019": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C510",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c01a": {
+    "corruptPid": "C04F",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C510",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c01b": {
+    "corruptPid": "C017",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C520",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c01c": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C520",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c01d": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Missing name",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c01e": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C310",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c01f": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C320",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c020": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Missing name",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c022": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C310",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c023": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C310",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c024": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C320",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c025": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C320",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c026": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C315",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c027": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C315",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c028": {
+    "corruptPid": "C04B",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C325",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c029": {
+    "corruptPid": "C04B",
+    "corruptVid": "047F",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C325",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c02f": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Calisto P610 SSL",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c032": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C435",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c033": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C435",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c034": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C725",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c035": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C520",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c036": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C520",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c037": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C325.1 mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c038": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C310",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c039": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C320",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c03a": {
+    "corruptPid": "C037",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C325.1 stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c03c": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Polycom P610",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c03d": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Cruzeiro",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c03e": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C310",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c03f": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C320",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c04a": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C315",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c04b": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C325",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c04c": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire 5XX mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c04d": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire 5XX stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c04e": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C435",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c04f": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C510",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c050": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C520",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c052": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire C520",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c053": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire 5XX stereo",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c054": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire 5XX mono",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c055": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire 3210",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c056": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire 3220",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c057": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire 3215",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c058": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire 3225",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "c059": {
+    "corruptPid": "",
+    "corruptVid": "",
+    "handlers": {
+      "USB": "ConexantDFU"
+    },
+    "name": "Black Wire 7220",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "ca01": {
+    "corruptPid": "005D",
+    "corruptVid": "0D9A",
+    "handlers": {
+      "Base": "CapriDFU",
+      "USB": "CapriDFU"
+    },
+    "name": "Capri",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "ca03": {
+    "corruptPid": "0000",
+    "corruptVid": "0000",
+    "handlers": {
+      "USB": "CapriDFU"
+    },
+    "name": "Capri",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "d006": {
+    "corruptPid": "AD02",
+    "corruptVid": "047F",
+    "handlers": {
+      "SetID": "SetID",
+      "USB": "RomeDFU"
+    },
+    "name": "Tern Charge Case",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "d007": {
+    "corruptPid": "AD02",
+    "corruptVid": "047F",
+    "handlers": {
+      "SetID": "SetID",
+      "USB": "RomeDFU"
+    },
+    "name": "Lark charge stand",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "d008": {
+    "corruptPid": "AD02",
+    "corruptVid": "047F",
+    "handlers": {
+      "SetID": "SetID",
+      "USB": "RomeDFU"
+    },
+    "name": "Voyager 5200 charger",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "d009": {
+    "corruptPid": "AD02",
+    "corruptVid": "047F",
+    "handlers": {
+      "SetID": "SetID",
+      "USB": "RomeDFU"
+    },
+    "name": "Emu Charge Case",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  },
+  "d00a": {
+    "corruptPid": "AD02",
+    "corruptVid": "047F",
+    "handlers": {
+      "HSOTA": "NeoDFU",
+      "LanguageOTA": "NeoDFU",
+      "SetID": "SetID"
+    },
+    "name": "Flamingo charger case",
+    "supportedOs": [
+      "win",
+      "mac",
+      "linux"
+    ]
+  },
+  "d00b": {
+    "corruptPid": "AD02",
+    "corruptVid": "047F",
+    "handlers": {
+      "SetID": "SetID",
+      "USB": "RomeDFU"
+    },
+    "name": "Shoreline",
+    "supportedOs": [
+      "win",
+      "mac"
+    ]
+  }
+}

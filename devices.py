@@ -245,6 +245,69 @@ DEVICE_CATEGORIES = {
 }
 
 
+# ── Bundled dfu.config (332 device entries) ─────────────────────────────────
+# Extracted from C:\Program Files\Poly\Poly Studio\LegacyHost\Components\
+# DFUManager\dfu.config — Poly's own master device table. Each entry has:
+#   name         e.g. "Savi 7310"     (canonical model description)
+#   handlers     {"Base": "FwuApiDFU", "Headset": "FwuApiDFU", ...}
+#   supportedOs  ["win", "mac", "linux"]
+#   corruptPid   PID the device exposes when in DFU/recovery mode
+#   corruptVid   matching VID for recovery
+# Re-extract whenever Poly Studio updates: see scripts/extract_dfu_config.py
+# (or polytool's extract logic in this commit).
+
+import json as _json
+
+_DFU_DEVICES_PATH = Path(__file__).resolve().parent / "data" / "dfu_devices.json"
+
+def _load_dfu_devices():
+    try:
+        return _json.loads(_DFU_DEVICES_PATH.read_text())
+    except (OSError, ValueError):
+        return {}
+
+DFU_DEVICES = _load_dfu_devices()
+
+# Reverse-lookup index: corrupt PID → primary PID (for recognizing devices
+# that are stuck in firmware-recovery/DFU mode and report a generic VID/PID
+# instead of their real one).
+DFU_CORRUPT_INDEX = {}
+for _pid_hex, _entry in DFU_DEVICES.items():
+    _cpid = (_entry.get("corruptPid") or "").lower()
+    if _cpid and _cpid not in ("0000", "ffff"):
+        DFU_CORRUPT_INDEX[_cpid] = _pid_hex
+
+# Brand prefixes that indicate a codename is already a human-friendly model
+# name (e.g. "Savi 7310", "Blackwire 8225") and just needs "Poly " in front.
+# Used as a final fallback when no CODENAME_MAP override exists.
+_POLY_MODEL_PREFIXES = (
+    "Savi", "Voyager", "Blackwire", "Sync", "Calisto", "EncorePro",
+    "Studio", "Edge", "Focus", "MDA", "DA",
+)
+
+
+def _polyize(name: str) -> str:
+    """Add the 'Poly ' brand prefix to a bare model name when one is missing.
+    Idempotent — names that already start with Poly/Plantronics/HP are
+    returned unchanged.
+    """
+    if not name:
+        return name
+    if name.startswith(("Poly ", "Plantronics ", "HP ")):
+        return name
+    if any(name.startswith(p + " ") or name == p for p in _POLY_MODEL_PREFIXES):
+        return f"Poly {name}"
+    return name
+
+
+def lookup_device_info(pid: int) -> dict:
+    """Return the dfu.config entry for a PID, or {} when unknown.
+
+    Useful for callers that want the model name + supported handlers without
+    going through the PolyDevice classification path."""
+    return DFU_DEVICES.get(f"{pid:04x}", {}) or DFU_DEVICES.get(f"{pid:04X}", {}) or {}
+
+
 def _normalize_version(v):
     """Normalize a firmware version string for comparison.
 
@@ -271,6 +334,24 @@ def _normalize_version(v):
         return int(digits.lstrip("0") or "0")
     except ValueError:
         return 0
+
+
+def _format_component_version(raw: str) -> str:
+    """Convert a Poly per-component version string into human form.
+
+    Poly's FirmwareComponents dict stores the BCD bcdDevice as a flat decimal
+    string: "1082" → "10.82", "0315" → "3.15", "3038" → "30.38". A handful of
+    components (notably setid) ship as already-dotted strings ("0.0.2134.3260"),
+    so leave anything containing a dot alone.
+    """
+    if not raw or not isinstance(raw, str):
+        return raw or ""
+    if "." in raw:
+        return raw
+    digits = "".join(c for c in raw if c.isdigit()) or raw
+    if len(digits) <= 2:
+        return "0." + digits.zfill(2)
+    return digits[:-2].lstrip("0") + "." + digits[-2:] if digits[:-2].lstrip("0") else "0." + digits[-2:]
 
 
 # ── Data Classes ─────────────────────────────────────────────────────────────
@@ -305,6 +386,18 @@ class PolyDevice:
     category: str = "unknown"
     dfu_executor: str = ""
     lens_product_id: str = ""
+    # Per-unit identity / multi-component fw (populated from LCS cache when available)
+    tattoo_serial: str = ""              # e.g. "S/N3J6DE4" — unique per physical unit
+    firmware_components: dict = field(default_factory=dict)  # {usb:"1082", headset:"1065", ...}
+    name_suffix: str = ""                # disambiguator appended when product_name collides
+    # Sourced from the bundled dfu.config (Poly's own master device table).
+    # model_description is the canonical model name ("Savi 7310"); the rest
+    # are useful for diagnostics, recovery detection, and update planning.
+    model_description: str = ""
+    dfu_handlers: dict = field(default_factory=dict)  # {Base: FwuApiDFU, Headset: FwuApiDFU, ...}
+    supported_os: list = field(default_factory=list)  # [win, mac, linux]
+    is_in_recovery: bool = False         # True when this PID matches a corruptPid in dfu.config
+    recovery_for_pid: str = ""           # If is_in_recovery, the primary PID this corresponds to
 
     @property
     def id(self) -> str:
@@ -335,6 +428,35 @@ class PolyDevice:
                 return "0." + raw.zfill(2)
             return raw[:-2] + "." + raw[-2:]
         return "unknown"
+
+    @property
+    def firmware_components_display(self) -> str:
+        """Compact multi-component summary, e.g. 'usb=10.82, hs=10.65'.
+
+        Returns empty string when no per-component data is known. Component
+        version digits are formatted with the same bcdDevice convention as
+        firmware_display (last two digits = minor version)."""
+        if not self.firmware_components:
+            return ""
+        # Short labels for the common Savi DECT slots
+        labels = {"usb": "usb", "headset": "hs", "base": "base",
+                  "tuning": "tun", "pic": "pic", "bluetooth": "bt",
+                  "camera": "cam", "setid": "setid"}
+        parts = []
+        for k, v in self.firmware_components.items():
+            if not v or v.lower() in ("ffff", "ffffffff"):
+                continue
+            parts.append(f"{labels.get(k, k)}={_format_component_version(v)}")
+        return ", ".join(parts)
+
+    @property
+    def display_name(self) -> str:
+        """Friendly name, with a per-unit suffix appended when there's a
+        product-name collision (so two Savi 7300s aren't indistinguishable)."""
+        base = self.friendly_name or self.product_name or self.codename or "Unknown"
+        if self.name_suffix:
+            return f"{base} ({self.name_suffix})"
+        return base
 
     @property
     def battery_display(self) -> str:
@@ -400,14 +522,14 @@ class Output:
         if self.console:
             table = Table(title=title, box=box.ROUNDED, show_lines=False)
             table.add_column("#", style="dim", width=2, no_wrap=True)
-            table.add_column("Device", style="bold white", no_wrap=True, max_width=28)
-            table.add_column("Firmware", style="green", no_wrap=True)
+            table.add_column("Device", style="bold white", no_wrap=True, max_width=44)
+            table.add_column("Firmware", style="green", no_wrap=True, max_width=40)
             table.add_column("Battery", style="yellow", no_wrap=True)
             table.add_column("VID:PID", style="dim", no_wrap=True)
             table.add_column("Category", style="magenta", no_wrap=True)
 
             for i, dev in enumerate(devices, 1):
-                name = dev.friendly_name or dev.product_name or dev.codename or "Unknown"
+                name = dev.display_name
                 bat = dev.battery_display
                 if dev.battery_level >= 0:
                     if dev.battery_level > 50:
@@ -416,10 +538,14 @@ class Output:
                         bat = f"[yellow]{bat}[/]"
                     else:
                         bat = f"[red]{bat}[/]"
+                # Prefer the per-component summary when available (more honest
+                # for multi-component DECT/Savi devices); otherwise fall back
+                # to firmware_display.
+                fw = dev.firmware_components_display or dev.firmware_display
                 table.add_row(
                     str(i),
                     name,
-                    dev.firmware_display,
+                    fw,
                     bat,
                     f"{dev.vid:04X}:{dev.pid:04X}",
                     dev.category,
@@ -427,18 +553,19 @@ class Output:
             self.console.print(table)
         else:
             print(f"\n{title}")
-            print("-" * 80)
-            fmt = "{:<3} {:<28} {:<16} {:<10} {:<15} {:<11}"
+            print("-" * 130)
+            fmt = "{:<3} {:<44} {:<16} {:<40} {:<13} {:<11}"
             print(fmt.format("#", "Device", "Serial", "FW", "Battery", "VID:PID"))
-            print("-" * 80)
+            print("-" * 130)
             for i, dev in enumerate(devices, 1):
-                name = dev.friendly_name or dev.product_name or dev.codename or "Unknown"
+                name = dev.display_name
+                fw = dev.firmware_components_display or dev.firmware_display
                 print(fmt.format(
                     i,
-                    name[:28],
+                    name[:44],
                     (dev.serial or "n/a")[:16],
-                    dev.firmware_display[:10],
-                    dev.battery_display[:15],
+                    fw[:40],
+                    dev.battery_display[:13],
                     f"{dev.vid:04X}:{dev.pid:04X}",
                 ))
 
@@ -449,21 +576,50 @@ out = Output()
 # ── Device Discovery ─────────────────────────────────────────────────────────
 
 def classify_device(dev: PolyDevice):
-    """Populate codename, friendly_name, category, and dfu_executor."""
+    """Populate codename, friendly_name, category, and dfu_executor.
+
+    Friendly-name priority (most-specific to least-specific):
+      1. CODENAME_MAP override         — for codenames that need translation
+                                          (e.g. internal "Hydra" → "Savi 7300/7400")
+      2. dfu.config DeviceDescription  — Poly's own master table, 332 PIDs,
+                                          covers SKUs polytool's hand-curated
+                                          map doesn't know about
+      3. USB descriptor product_name   — the iProduct string on the device
+      4. f"Poly Device ({pid_hex})"    — last-resort placeholder
+    """
     # Codename from PID database
     dev.codename = PID_CODENAMES.get(dev.pid, "")
 
-    # Friendly name: prefer codename-mapped name (more descriptive), then USB string
+    # Pull in everything dfu.config knows about this PID
+    dfu_entry = lookup_device_info(dev.pid)
+    dev.model_description = dfu_entry.get("name", "") or ""
+    dev.dfu_handlers = dfu_entry.get("handlers", {}) or {}
+    dev.supported_os = dfu_entry.get("supportedOs", []) or []
+
+    # Recovery-mode detection: some devices expose a generic VID/PID when
+    # stuck in DFU mode. dfu.config records that mapping so we can recognize
+    # them and tell the user which device is actually bricked.
+    pid_hex_lc = f"{dev.pid:04x}"
+    if pid_hex_lc in DFU_CORRUPT_INDEX:
+        dev.is_in_recovery = True
+        dev.recovery_for_pid = DFU_CORRUPT_INDEX[pid_hex_lc]
+
+    # Resolve friendly name through the priority above.
     mapped_name = CODENAME_MAP.get(dev.codename, "") if dev.codename else ""
     if mapped_name:
         dev.friendly_name = mapped_name
+    elif dev.model_description:
+        dev.friendly_name = _polyize(dev.model_description)
     elif dev.product_name:
         dev.friendly_name = dev.product_name
     else:
         dev.friendly_name = f"Poly Device ({dev.pid_hex})"
 
     # Category classification — search across all name variants
-    search_str = f"{dev.friendly_name} {dev.codename} {dev.product_name} {mapped_name}".lower()
+    search_str = (
+        f"{dev.friendly_name} {dev.codename} {dev.product_name} "
+        f"{mapped_name} {dev.model_description}"
+    ).lower()
     dev.category = "other"
     for cat, keywords in DEVICE_CATEGORIES.items():
         for kw in keywords:
@@ -476,8 +632,30 @@ def classify_device(dev: PolyDevice):
     # LensProductId (hex of PID)
     dev.lens_product_id = f"{dev.pid:x}"
 
-    # DFU executor
+    # DFU executor — prefer the explicit map, fall back to inferring from
+    # the dfu_handlers (so newly added devices work without needing a
+    # DFU_EXECUTOR_MAP entry).
     dev.dfu_executor = DFU_EXECUTOR_MAP.get(dev.lens_product_id, "")
+    if not dev.dfu_executor and dev.dfu_handlers:
+        dev.dfu_executor = _infer_executor_from_handlers(dev.dfu_handlers)
+
+
+def _infer_executor_from_handlers(handlers: dict) -> str:
+    """Map a set of dfu.config DFU handler names to the eDfu executor that
+    actually drives them. Useful as a fallback when a PID isn't in
+    DFU_EXECUTOR_MAP yet — Poly's handler names are the most reliable hint
+    of which executor will be invoked.
+    """
+    names = {v for v in handlers.values() if isinstance(v, str)}
+    if "FwuApiDFU" in names or "SetID" in names:
+        return "LegacyDfu"
+    if "ConexantDFU" in names:
+        return "CxEepromDfu"
+    if "NeoDFU" in names:
+        return "btNeoDfu"
+    if "TIDFU" in names or "TiDFU" in names:
+        return "HidTiDfu"
+    return ""
 
 
 def discover_devices() -> list:
@@ -531,7 +709,70 @@ def discover_devices() -> list:
 
     # Deduplicate further: group by serial and keep the best entry per physical device
     devices = _deduplicate_devices(list(seen.values()))
-    return sorted(devices, key=lambda d: (d.category, d.friendly_name))
+
+    # Hydrate per-unit identity (tattoo serial) and per-component firmware
+    # versions from LCS's cache. LCS keeps these up-to-date for every attach;
+    # reading them here is far cheaper than a full HID round-trip and avoids
+    # contention with Poly Studio. No-op when LCS isn't installed.
+    _hydrate_from_lcs_cache(devices)
+
+    # Disambiguate duplicate friendly_names: two AC27/AC28 Savis report the
+    # same product string, so users can't tell them apart in scan output.
+    # Append the tattoo serial (or last 6 of genes serial) as a suffix.
+    _disambiguate_names(devices)
+
+    return sorted(devices, key=lambda d: (d.category, d.friendly_name, d.name_suffix))
+
+
+def _hydrate_from_lcs_cache(devices: list) -> None:
+    """Fill tattoo_serial and firmware_components from LCS's cache files.
+
+    The cache lives at %PROGRAMDATA%\\Poly\\Lens Control Service\\device_PLT_*
+    on Windows; each file is a JSON dump LCS keeps current per device attach.
+    Silently no-ops when the cache doesn't exist (LCS not installed) or when
+    we can't match a discovered device to any cache entry.
+    """
+    try:
+        from setid_fix import read_lcs_device_cache
+    except Exception:
+        return
+    cache = read_lcs_device_cache()
+    if not cache:
+        return
+    for dev in devices:
+        if not dev.serial:
+            continue
+        rec = cache.get(dev.serial)
+        if not rec:
+            continue
+        tattoo = rec.get("TattooSerialNumber") or rec.get("DisplaySerialNumber") or ""
+        if tattoo:
+            dev.tattoo_serial = tattoo
+        comps = rec.get("FirmwareComponents") or {}
+        if isinstance(comps, dict):
+            # Keep only populated, non-FF components
+            dev.firmware_components = {
+                k: v for k, v in comps.items()
+                if isinstance(v, str) and v and v.lower() not in ("ffff", "ffffffff")
+            }
+
+
+def _disambiguate_names(devices: list) -> None:
+    """Set name_suffix on devices whose friendly_name collides with another's.
+
+    Prefers the tattoo serial as the suffix (short, human-friendly,
+    user-recognizable from the headset's label). Falls back to the last 6
+    characters of the GUID-style serial when no tattoo is available.
+    """
+    counts = {}
+    for d in devices:
+        counts[d.friendly_name] = counts.get(d.friendly_name, 0) + 1
+    for d in devices:
+        if counts.get(d.friendly_name, 0) > 1:
+            if d.tattoo_serial:
+                d.name_suffix = d.tattoo_serial
+            elif d.serial:
+                d.name_suffix = d.serial[-6:]
 
 
 def _bus_type_str(bus: int) -> str:

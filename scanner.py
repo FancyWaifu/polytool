@@ -48,36 +48,86 @@ def cmd_scan(args):
 
 
 def _warn_on_ff_setid(devices):
-    """Cross-check discovered devices against LCS's cache for FFFF SetID problem.
+    """Cross-check discovered devices against LCS's cache for two known
+    Poly Studio display bugs:
 
-    LCS keeps device_PLT_<serial> JSON files updated with each device attach.
-    If FirmwareVersion or setid in any of those files reads as FFs, the
-    headset's NVRAM SetID region is unprogrammed — flag it and suggest a fix.
+      1. FFFF SetID NVRAM: device shows ffff.ffff.ffff.ffff as firmware
+         version. Fixable via `polytool fix-setid`.
+      2. Empty FirmwareVersion despite populated FirmwareComponents: a Poly
+         LCS bug introduced when newer Savi firmware (10.82+) dropped the
+         setId field from firmwareVersion. LCS doesn't roll up per-component
+         versions into FirmwareVersion, so Poly Studio shows blank. NOT
+         fixable on the device — Poly's Devices.dll needs to compute the
+         fallback. Surfaced here so the user understands why Studio is blank.
     """
     try:
         from setid_fix import read_lcs_device_cache, diagnose_setid
     except Exception:
-        return  # not on Windows or import failed; silently skip
+        return
     cache = read_lcs_device_cache()
     if not cache:
-        return  # Poly Lens not installed or no cache yet
-    issues = []
+        return
+    ff_issues = []
+    blank_issues = []
     for dev in devices:
         if not dev.serial:
             continue
         d = diagnose_setid(dev.serial, cache=cache)
         if d["state"] == "ff":
-            issues.append((dev, d))
-    if not issues:
-        return
-    out.print("")
-    out.warn(f"  {len(issues)} device(s) with unprogrammed SetID NVRAM (FFFFs):")
-    for dev, d in issues:
-        name = dev.friendly_name or dev.product_name or "device"
-        out.print(f"    - {name} ({dev.vid_hex}:{dev.pid_hex})  "
-                  f"FirmwareVersion={d['firmware_version']!r}")
-    out.print("    Fix:  polytool fix-setid       (fast, ~10 sec)")
-    out.print("          polytool update-legacy   (full firmware update, ~10 min, also fixes it)")
+            ff_issues.append((dev, d))
+            continue
+        # New-schema bug: cache has components but no top-level FirmwareVersion
+        rec = cache.get(dev.serial, {})
+        comps = rec.get("FirmwareComponents") or {}
+        has_real_components = any(
+            isinstance(v, str) and v and v.lower() not in ("ffff", "ffffffff")
+            for v in comps.values()
+        )
+        if has_real_components and not (rec.get("FirmwareVersion") or "").strip():
+            blank_issues.append(dev)
+
+    def _yellow(msg):
+        # Use stdout (out.print) instead of out.warn so warning text doesn't
+        # leapfrog the device table on systems without rich (stderr is
+        # unbuffered, stdout line-buffered).
+        if HAS_RICH:
+            out.print(f"[bold yellow]Warning:[/] {msg}")
+        else:
+            out.print(f"Warning: {msg}")
+
+    if ff_issues:
+        out.print("")
+        _yellow(f"{len(ff_issues)} device(s) with unprogrammed SetID NVRAM (FFFFs):")
+        for dev, d in ff_issues:
+            out.print(f"    - {dev.display_name} ({dev.vid_hex}:{dev.pid_hex})  "
+                      f"FirmwareVersion={d['firmware_version']!r}")
+        out.print("    Fix:  polytool fix-setid       (fast, ~10 sec)")
+        out.print("          polytool update-legacy   (full firmware update, ~10 min, also fixes it)")
+
+    if blank_issues:
+        # If our lensserver service is up, Poly Studio is reading from us
+        # (not LCS) and the synthesis is already happening — the cache-file
+        # blank is irrelevant. Only warn when LCS is the live source.
+        try:
+            from service import _probe_lensserver_running
+            lensserver_active = _probe_lensserver_running()
+        except Exception:
+            lensserver_active = False
+
+        if lensserver_active:
+            out.print("")
+            out.print("  (Note: 2 device(s) have blank LCS FirmwareVersion, but lensserver is")
+            out.print("   active and synthesizing it for Poly Studio - display will be correct.)")
+        else:
+            out.print("")
+            _yellow(f"{len(blank_issues)} device(s) where Poly Studio shows blank firmware version:")
+            for dev in blank_issues:
+                comp = dev.firmware_components_display or "n/a"
+                out.print(f"    - {dev.display_name} ({dev.vid_hex}:{dev.pid_hex})  actual: {comp}")
+            out.print("    Cause: Poly LCS bug (Devices.dll). New Savi firmware reports per-component")
+            out.print("           versions but no top-level FirmwareVersion, and LCS doesn't roll them up.")
+            out.print("    Fix:   polytool install-service   (auto-starts lensserver MITM at every logon)")
+            out.print("           polytool service-start     (start it now without re-logging in)")
 
 
 def cmd_info(args):
@@ -99,12 +149,26 @@ def cmd_info(args):
         fw_format_str = transport_info[1] if transport_info else "n/a"
         platform_str = transport_info[2] if transport_info else "n/a"
 
+        comp_str = dev.firmware_components_display or "n/a"
+        handlers_str = (
+            ", ".join(f"{k}={v}" for k, v in dev.dfu_handlers.items())
+            if dev.dfu_handlers else "n/a"
+        )
+        os_str = ", ".join(dev.supported_os) if dev.supported_os else "n/a"
+        recovery_str = (
+            f"YES (recovery PID for 0x{dev.recovery_for_pid.upper()})"
+            if dev.is_in_recovery else "no"
+        )
+
         if HAS_RICH:
             info_lines = [
-                f"[bold]Product:[/]        {dev.friendly_name}",
+                f"[bold]Product:[/]        {dev.display_name}",
+                f"[bold]Model:[/]          {dev.model_description or 'n/a'}",
                 f"[bold]Manufacturer:[/]   {dev.manufacturer}",
                 f"[bold]Serial:[/]         {dev.serial or 'n/a'}",
+                f"[bold]Tattoo:[/]         {dev.tattoo_serial or 'n/a'}",
                 f"[bold]Firmware:[/]       {dev.firmware_display}",
+                f"[bold]Components:[/]     {comp_str}",
                 f"[bold]Category:[/]       {dev.category}",
                 f"[bold]VID:PID:[/]        {dev.vid_hex}:{dev.pid_hex}",
                 f"[bold]USB/BT:[/]         {dev.bus_type}",
@@ -113,9 +177,12 @@ def cmd_info(args):
                 f"[bold]Codename:[/]       {dev.codename or 'n/a'}",
                 f"[bold]LensProductID:[/]  {dev.lens_product_id}",
                 f"[bold]DFU Executor:[/]   {dev.dfu_executor or 'n/a'}",
+                f"[bold]DFU Handlers:[/]   {handlers_str}",
                 f"[bold]DFU Transport:[/]  {transport_str}",
                 f"[bold]FW Format:[/]      {fw_format_str}",
                 f"[bold]Update Support:[/] {platform_str}",
+                f"[bold]Supported OS:[/]   {os_str}",
+                f"[bold]Recovery Mode:[/]  {recovery_str}",
             ]
             if dev.is_muted:
                 info_lines.append("[bold]Muted:[/]          Yes")
@@ -124,26 +191,32 @@ def cmd_info(args):
 
             out.console.print(Panel(
                 "\n".join(info_lines),
-                title=dev.friendly_name,
+                title=dev.display_name,
                 border_style="cyan",
                 expand=False,
             ))
         else:
-            print(f"\n{'='*50}")
-            print(f"  {dev.friendly_name}")
-            print(f"{'='*50}")
+            print(f"\n{'='*60}")
+            print(f"  {dev.display_name}")
+            print(f"{'='*60}")
+            print(f"  Model:         {dev.model_description or 'n/a'}")
             print(f"  Manufacturer:  {dev.manufacturer}")
             print(f"  Serial:        {dev.serial or 'n/a'}")
+            print(f"  Tattoo:        {dev.tattoo_serial or 'n/a'}")
             print(f"  Firmware:      {dev.firmware_display}")
+            print(f"  Components:    {comp_str}")
             print(f"  Category:      {dev.category}")
             print(f"  VID:PID:       {dev.vid_hex}:{dev.pid_hex}")
             print(f"  USB/BT:        {dev.bus_type}")
             print(f"  Battery:       {dev.battery_display}")
             print(f"  Codename:      {dev.codename or 'n/a'}")
             print(f"  DFU Executor:  {dev.dfu_executor or 'n/a'}")
+            print(f"  DFU Handlers:  {handlers_str}")
             print(f"  DFU Transport: {transport_str}")
             print(f"  FW Format:     {fw_format_str}")
             print(f"  Update Support:{platform_str}")
+            print(f"  Supported OS:  {os_str}")
+            print(f"  Recovery Mode: {recovery_str}")
 
 
 def cmd_battery(args):
@@ -510,15 +583,22 @@ def _select_devices(devices: list, selector: str = None) -> list:
     except ValueError:
         pass
 
+    sel_low = selector.lower()
+
     # Try as serial prefix
-    matches = [d for d in devices if d.serial and d.serial.lower().startswith(selector.lower())]
+    matches = [d for d in devices if d.serial and d.serial.lower().startswith(sel_low)]
     if matches:
         return matches
 
-    # Try as product name substring
-    matches = [d for d in devices if selector.lower() in d.friendly_name.lower()]
+    # Try as tattoo serial (the value printed on the device label)
+    matches = [d for d in devices if d.tattoo_serial and sel_low in d.tattoo_serial.lower()]
     if matches:
         return matches
 
-    out.error(f"No device matching '{selector}'. Use a number, serial prefix, or device name.")
+    # Try as product name substring (also matches the disambiguator suffix)
+    matches = [d for d in devices if sel_low in d.display_name.lower()]
+    if matches:
+        return matches
+
+    out.error(f"No device matching '{selector}'. Use a number, serial prefix, tattoo, or device name.")
     return []
