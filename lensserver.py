@@ -147,6 +147,10 @@ class LensServer:
         if self._original_port:
             _log(f"  Original LCS port saved: {self._original_port}", verbose_only=True)
 
+        # Start the port-file watcher so we keep ownership even when LCS
+        # rewrites the file during its own startup or fix-setid's restart.
+        self._start_port_file_watcher()
+
     def _signal_shutdown(self):
         """Handle SIGTERM/SIGINT — stop cleanly."""
         self.running = False
@@ -161,6 +165,51 @@ class LensServer:
                 PORT_FILE.unlink(missing_ok=True)
         except Exception:
             pass
+
+    def reclaim_port_file(self):
+        """Re-write our port to the SocketPortNumber file so Poly Studio
+        keeps connecting to us.
+
+        Needed after any operation that restarts LCS (e.g. fix-setid's
+        device_isolate): LCS overwrites the port file with its own port
+        on startup, which would silently route Studio to LCS instead of
+        us on Studio's next reconnect."""
+        try:
+            current = PORT_FILE.read_text().strip() if PORT_FILE.exists() else ""
+        except Exception:
+            current = ""
+        if current == str(self.port):
+            return  # already ours
+        # Save what LCS reclaimed (so cleanup can still restore it later)
+        if current and current != str(self.port):
+            self._original_port = current
+        try:
+            PORT_FILE.write_text(str(self.port))
+            _log(f"  Reclaimed port file: {self.port} (was {current!r})",
+                 verbose_only=True)
+        except Exception as e:
+            _log(f"  Failed to reclaim port file: {e}")
+
+    def _start_port_file_watcher(self):
+        """Background thread that polls SocketPortNumber every 2s and
+        reclaims it if LCS (or anyone else) overwrote our value.
+
+        LCS doesn't just write the port file at startup — it appears to
+        rewrite periodically as part of its own bookkeeping. A one-shot
+        reclaim after fix-setid isn't enough; without continuous
+        reclaiming, Studio's next reconnect lands on stock LCS within
+        seconds and our MITM stops mattering."""
+        import threading
+        def _watcher():
+            while self.running:
+                try:
+                    self.reclaim_port_file()
+                except Exception:
+                    pass
+                time.sleep(2)
+        t = threading.Thread(target=_watcher, daemon=True,
+                             name="port-file-watcher")
+        t.start()
 
     def stop(self):
         """Stop the server."""

@@ -112,6 +112,9 @@ class APIHandler(BaseHTTPRequestHandler):
         if len(parts) == 5 and parts[1:3] == ["api", "devices"] and parts[4] == "settings":
             device_id = parts[3]
             self._handle_set_setting(device_id)
+        elif len(parts) == 5 and parts[1:3] == ["api", "devices"] and parts[4] == "fix-setid":
+            device_id = parts[3]
+            self._handle_fix_setid(device_id)
         else:
             self._send_error(404, f"Not found: {path}")
 
@@ -147,6 +150,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 {"method": "GET", "path": "/api/devices/:id", "description": "Single device details"},
                 {"method": "GET", "path": "/api/devices/:id/settings", "description": "Device settings with values"},
                 {"method": "POST", "path": "/api/devices/:id/settings", "description": "Write a setting {name, value}"},
+                {"method": "POST", "path": "/api/devices/:id/fix-setid", "description": "Write SetID NVRAM (clears the FFFF firmware-version bug). Body: {version?: '0001.0000.0000.0001', isolate?: true, dryRun?: false}"},
                 {"method": "GET", "path": "/api/devices/:id/battery", "description": "Battery status"},
                 {"method": "GET", "path": "/api/devices/:id/dfu", "description": "Firmware update status"},
                 {"method": "DELETE", "path": "/api/devices/:id", "description": "Remove/forget a device"},
@@ -255,6 +259,94 @@ class APIHandler(BaseHTTPRequestHandler):
             "value": value,
             "written": success,
         })
+
+    def _handle_fix_setid(self, device_id):
+        """Trigger a SetID NVRAM write (the FFFF firmware-version bug fix).
+
+        Runs the same flow as `polytool fix-setid <serial>`: forges a
+        minimal setid bundle, optionally isolates sibling same-PID devices
+        (which restarts LCS), invokes LegacyDfu against the target, then
+        re-claims the SocketPortNumber port file so Studio keeps reaching
+        us afterward.
+
+        Synchronous — blocks until LegacyDfu reports success or failure
+        (~5s on a single-device host, ~25-30s with isolation). For UIs
+        that can't tolerate the wait, poll /api/devices/:id afterward to
+        confirm the device's firmware_components.setid changed.
+
+        Body (all optional):
+          version  dotted "<major>.<minor>.<revision>.<build>" (default
+                   "0001.0000.0000.0001" — the same value polytool
+                   fix-setid uses by default)
+          isolate  bool, default true. Set false to skip the LCS-restart
+                   isolation dance when only one device of this PID is
+                   present.
+          dryRun   bool, default false. Build the bundle but don't run
+                   LegacyDfu — useful for testing the endpoint wiring.
+        """
+        did, dev = self._find_device(device_id)
+        if not dev:
+            self._send_error(404, f"Device not found: {device_id}")
+            return
+
+        # Body is optional — if absent, use defaults from setid_fix.
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(content_length) if content_length else b""
+            data = json.loads(body_raw) if body_raw else {}
+        except (json.JSONDecodeError, ValueError):
+            self._send_error(400, "Invalid JSON body")
+            return
+
+        # Pull the actual VID/PID/serial off the device record. The
+        # truncated 8-char deviceId in the URL isn't enough to pass to
+        # LegacyDfu — it needs the full 32-char serial. _polytool_dev is
+        # cached as a dict (not the PolyDevice object) so use dict access.
+        ptd = dev.get("_polytool_dev") or {}
+        serial = ptd.get("serial") or dev.get("serialNumber") or ""
+        try:
+            vid = int(ptd.get("vid") or dev.get("vid") or 0)
+            pid = int(ptd.get("pid") or dev.get("pid") or 0)
+        except (TypeError, ValueError):
+            vid = pid = 0
+        if not serial or not vid or not pid:
+            self._send_error(500,
+                f"Could not resolve full serial/vid/pid for device (got "
+                f"serial={serial!r} vid={vid} pid={pid})")
+            return
+
+        from setid_fix import fix_setid, DEFAULT_SETID
+        version = data.get("version") or DEFAULT_SETID
+        isolate = data.get("isolate", True)
+        dry_run = data.get("dryRun", False)
+
+        log_lines = []
+        def _capture(s):
+            log_lines.append(str(s))
+
+        result = fix_setid(
+            serial=serial, vid=vid, pid=pid,
+            version=version, dry_run=dry_run,
+            isolate_siblings=isolate, log=_capture,
+        )
+
+        # Re-claim the port file in case LCS overwrote it during the
+        # isolate's restart cycle. Without this, Poly Studio's next
+        # reconnect would land on stock LCS instead of us.
+        server = self._get_server()
+        if hasattr(server, "reclaim_port_file"):
+            server.reclaim_port_file()
+
+        self._send_json({
+            "deviceId": did,
+            "serial": serial,
+            "version": version,
+            "isolate": isolate,
+            "dryRun": dry_run,
+            "success": bool(result.get("success")),
+            "message": result.get("message", ""),
+            "log": log_lines,
+        }, status=200 if result.get("success") else 500)
 
     def _handle_device_battery(self, device_id):
         """Get battery status for a device."""
