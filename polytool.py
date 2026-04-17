@@ -69,6 +69,8 @@ from service import (
     cmd_service_status, cmd_service_start, cmd_service_stop,
 )
 
+from device_isolate import cmd_reset_pnp
+
 
 # ── Main Entry Point ─────────────────────────────────────────────────────────
 
@@ -99,11 +101,22 @@ def main():
                                 help="Device # / serial / name / 'all'")
 
     # update
-    update_parser = subparsers.add_parser("update", help="Download and apply firmware updates")
+    update_parser = subparsers.add_parser(
+        "update",
+        help="Download and apply firmware updates (mimics Poly Studio's "
+             "Update Available button - same LegacyDfu pipeline)",
+    )
     update_parser.add_argument("device", nargs="?", default="all",
-                               help="Device # / serial / name / 'all'")
+                               help="Device # / serial / tattoo / name / 'all'")
     update_parser.add_argument("--force", action="store_true",
                                help="Force update even if current version matches")
+    update_parser.add_argument("--yes", "-y", action="store_true",
+                               help="Skip confirmation prompts")
+    update_parser.add_argument("--no-isolate", dest="isolate",
+                               action="store_false", default=True,
+                               help="Skip auto-isolation of sibling same-PID devices")
+    update_parser.add_argument("--verbose", action="store_true",
+                               help="Print full LegacyDfu output on failure")
 
     # monitor
     monitor_parser = subparsers.add_parser("monitor", help="Live device status dashboard")
@@ -183,6 +196,13 @@ def main():
         help="Stop the running lensserver and end the scheduled task",
     )
 
+    # reset-pnp
+    subparsers.add_parser(
+        "reset-pnp",
+        help="Re-enable any Poly device stuck in CM_PROB_DISABLED state "
+             "(safety net for fix-setid runs that left devices disabled)",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -208,6 +228,7 @@ def main():
         "service-status": cmd_service_status,
         "service-start": cmd_service_start,
         "service-stop": cmd_service_stop,
+        "reset-pnp": cmd_reset_pnp,
     }
 
     cmd_func = commands.get(args.command)

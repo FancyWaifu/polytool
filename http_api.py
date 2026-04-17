@@ -115,6 +115,9 @@ class APIHandler(BaseHTTPRequestHandler):
         elif len(parts) == 5 and parts[1:3] == ["api", "devices"] and parts[4] == "fix-setid":
             device_id = parts[3]
             self._handle_fix_setid(device_id)
+        elif len(parts) == 5 and parts[1:3] == ["api", "devices"] and parts[4] == "update":
+            device_id = parts[3]
+            self._handle_update(device_id)
         else:
             self._send_error(404, f"Not found: {path}")
 
@@ -151,6 +154,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 {"method": "GET", "path": "/api/devices/:id/settings", "description": "Device settings with values"},
                 {"method": "POST", "path": "/api/devices/:id/settings", "description": "Write a setting {name, value}"},
                 {"method": "POST", "path": "/api/devices/:id/fix-setid", "description": "Write SetID NVRAM (clears the FFFF firmware-version bug). Body: {version?: '0001.0000.0000.0001', isolate?: true, dryRun?: false}"},
+                {"method": "POST", "path": "/api/devices/:id/update", "description": "Download and install latest firmware from Poly Cloud (same flow as Poly Studio's Update Available button). Body: {force?: false, isolate?: true}"},
                 {"method": "GET", "path": "/api/devices/:id/battery", "description": "Battery status"},
                 {"method": "GET", "path": "/api/devices/:id/dfu", "description": "Firmware update status"},
                 {"method": "DELETE", "path": "/api/devices/:id", "description": "Remove/forget a device"},
@@ -343,6 +347,131 @@ class APIHandler(BaseHTTPRequestHandler):
             "version": version,
             "isolate": isolate,
             "dryRun": dry_run,
+            "success": bool(result.get("success")),
+            "message": result.get("message", ""),
+            "log": log_lines,
+        }, status=200 if result.get("success") else 500)
+
+    def _handle_update(self, device_id):
+        """Trigger a firmware update - mirrors Poly Studio's Update Available
+        button click.
+
+        Same code path used everywhere:
+          Studio button click  -> ScheduleDfuExecution -> on_schedule_dfu
+                               -> install_bundle -> LegacyDfu pipeline
+          curl POST here       -> install_bundle -> LegacyDfu pipeline
+          polytool update CLI  -> install_bundle -> LegacyDfu pipeline
+
+        Synchronous, blocks until LegacyDfu finishes (5-10 min for a real
+        bundle on a stale device, ~30s for a smart-skip when most components
+        are already current).
+
+        Body (all optional):
+          force    bool, default false. Update even when the cloud version
+                   matches the device's current usb component.
+          isolate  bool, default true. Auto-isolate sibling same-PID devices
+                   so the DFU lands on this serial.
+        """
+        did, dev = self._find_device(device_id)
+        if not dev:
+            self._send_error(404, f"Device not found: {device_id}")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(content_length) if content_length else b""
+            data = json.loads(body_raw) if body_raw else {}
+        except (json.JSONDecodeError, ValueError):
+            self._send_error(400, "Invalid JSON body")
+            return
+
+        ptd = dev.get("_polytool_dev") or {}
+        serial = ptd.get("serial") or dev.get("serialNumber") or ""
+        try:
+            vid = int(ptd.get("vid") or dev.get("vid") or 0)
+            pid = int(ptd.get("pid") or dev.get("pid") or 0)
+        except (TypeError, ValueError):
+            vid = pid = 0
+        if not serial or not vid or not pid:
+            self._send_error(500,
+                f"Could not resolve full serial/vid/pid for device "
+                f"(serial={serial!r} vid={vid} pid={pid})")
+            return
+
+        # Check Poly Cloud for the latest bundle. We use the same query
+        # path lensserver's _check_firmware_update uses (so what shows up
+        # as "Update Available" in Studio is exactly what we install).
+        from firmware import PolyCloudAPI
+        from devices import PolyDevice, _normalize_version
+        from setid_fix import install_bundle
+
+        cloud = PolyCloudAPI()
+        stub = PolyDevice(vid=vid, pid=pid, lens_product_id=f"{pid:04x}")
+        info = cloud.check_firmware(stub)
+        if not info or not info.get("download_url"):
+            self._send_json({
+                "deviceId": did, "serial": serial,
+                "success": False,
+                "message": "No firmware available from Poly Cloud for this PID",
+            }, status=404)
+            return
+
+        current_fw = ptd.get("firmware_display") or dev.get("firmwareVersion") or ""
+        latest_v = info.get("latest", "")
+        force = bool(data.get("force", False))
+        if (_normalize_version(current_fw) >= _normalize_version(latest_v)
+                and not force):
+            self._send_json({
+                "deviceId": did, "serial": serial,
+                "currentVersion": current_fw,
+                "latestVersion": latest_v,
+                "success": True,
+                "skipped": True,
+                "message": f"Already up to date (v{current_fw}). "
+                           f"Pass force=true to reinstall.",
+            })
+            return
+
+        # Download
+        log_lines = []
+        def _log(s): log_lines.append(str(s))
+        _log(f"Downloading bundle v{latest_v}...")
+        path = cloud.download_firmware(info["download_url"])
+        if not path:
+            self._send_json({
+                "deviceId": did, "serial": serial,
+                "success": False,
+                "message": "Bundle download failed",
+                "log": log_lines,
+            }, status=500)
+            return
+        _log(f"Bundle: {path}")
+
+        # Pause our native bridge so LegacyHost gets exclusive USB. Same
+        # dance lensserver's on_schedule_dfu does.
+        server = self._get_server()
+        paused = False
+        if hasattr(server, "_pause_native_bridge_for_dfu"):
+            paused = server._pause_native_bridge_for_dfu()
+
+        try:
+            isolate = data.get("isolate", True)
+            result = install_bundle(
+                zip_path=path, vid=vid, pid=pid, serial=serial,
+                isolate_siblings=isolate, log=_log,
+            )
+        finally:
+            if paused and hasattr(server, "_resume_native_bridge_after_dfu"):
+                server._resume_native_bridge_after_dfu()
+            # LCS got restarted by isolate; reclaim port file so Studio
+            # keeps reaching us.
+            if hasattr(server, "reclaim_port_file"):
+                server.reclaim_port_file()
+
+        self._send_json({
+            "deviceId": did, "serial": serial,
+            "currentVersion": current_fw,
+            "latestVersion": latest_v,
             "success": bool(result.get("success")),
             "message": result.get("message", ""),
             "log": log_lines,

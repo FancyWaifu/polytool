@@ -354,7 +354,21 @@ def cmd_updates(args):
 
 
 def cmd_update(args):
-    """Download and apply firmware updates."""
+    """Download and apply firmware updates - same code path Poly Studio uses.
+
+    For each target device:
+      1. Query Poly cloud catalog for the latest firmware bundle
+      2. Compare bundle version vs device's current usb component
+      3. If newer (or --force), prompt for confirmation (unless --yes)
+      4. Download the bundle, run install_bundle() -> LegacyDfu pipeline
+
+    install_bundle is the same function lensserver's on_schedule_dfu and
+    polytool fix-setid use. Auto-isolates sibling same-PID devices so the
+    DFU lands on the unit you specified.
+    """
+    from setid_fix import install_bundle
+    from devices import _normalize_version
+
     out.header("PolyTool - Firmware Updater")
 
     devices = discover_devices()
@@ -363,13 +377,86 @@ def cmd_update(args):
         return
 
     cloud = PolyCloudAPI()
-    updater = FirmwareUpdater(cloud)
     targets = _select_devices(devices, args.device)
+    if not targets:
+        return
 
+    # Build the update list first so the user sees the full plan before
+    # we start hitting any device.
+    plan = []
     for dev in targets:
         try_read_device_info(dev)
         try_read_battery(dev)
-        updater.check_and_update(dev, force=args.force)
+        info = cloud.check_firmware(dev)
+        if not info or not info.get("download_url"):
+            plan.append((dev, None, "no firmware in cloud catalog"))
+            continue
+        current_n = _normalize_version(dev.firmware_display)
+        latest_n = _normalize_version(info.get("latest", ""))
+        if current_n >= latest_n and not getattr(args, "force", False):
+            plan.append((dev, info, f"already up to date (v{dev.firmware_display})"))
+            continue
+        plan.append((dev, info, "update available"))
+
+    # Show the plan
+    out.print("")
+    has_updates = False
+    for dev, info, status in plan:
+        latest = (info or {}).get("latest", "?")
+        if "update available" in status:
+            has_updates = True
+            out.print(f"  [bold yellow]Update Available[/]  {dev.display_name}  "
+                      f"v{dev.firmware_display} -> v{latest}" if HAS_RICH
+                      else f"  Update Available  {dev.display_name}  "
+                           f"v{dev.firmware_display} -> v{latest}")
+        else:
+            out.print(f"  -                 {dev.display_name}  ({status})")
+
+    if not has_updates:
+        out.success("\nAll selected devices are already up to date.")
+        return
+
+    # Apply updates - prompt per device unless --yes
+    for dev, info, status in plan:
+        if "update available" not in status:
+            continue
+        out.print(f"\n{'='*60}")
+        out.print(f"  Updating: {dev.display_name}")
+        out.print(f"  Serial:   {dev.serial}")
+        out.print(f"  Current:  v{dev.firmware_display}")
+        out.print(f"  Latest:   v{info.get('latest', '?')}")
+        if info.get("release_notes"):
+            notes = info["release_notes"][:300].replace("\n", "\n    ")
+            out.print(f"  Notes:    {notes}")
+
+        if not getattr(args, "yes", False):
+            ans = input(f"\n  Press Enter to install (or n to skip): ").strip().lower()
+            if ans == "n":
+                out.print("  skipped")
+                continue
+
+        # Download
+        out.print("  Downloading bundle...")
+        path = cloud.download_firmware(info["download_url"])
+        if not path:
+            out.error("  Download failed")
+            continue
+        out.print(f"  Bundle: {path}")
+
+        # Install via the same pipeline Studio uses
+        out.print("  Installing (this can take several minutes; don't unplug)...")
+        result = install_bundle(
+            zip_path=path,
+            vid=dev.vid, pid=dev.pid, serial=dev.serial,
+            isolate_siblings=getattr(args, "isolate", True),
+            log=lambda s: out.print(f"  {s}"),
+        )
+        if result["success"]:
+            out.success(f"  OK: {result['message']}")
+        else:
+            out.error(f"  FAILED: {result['message']}")
+            if getattr(args, "verbose", False) and result.get("output"):
+                out.print(result["output"])
 
 
 def cmd_monitor(args):

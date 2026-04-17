@@ -415,12 +415,19 @@ def cmd_fix_setid(args):
 
 # ── Full bundle install (real firmware update via LegacyDfu) ────────────────
 
-def install_bundle(zip_path, vid, pid, serial, timeout=900, log=print):
+def install_bundle(zip_path, vid, pid, serial, timeout=900,
+                   isolate_siblings=True, log=print):
     """Install a real firmware bundle .zip via LegacyDfu + LegacyHost.
 
     Same plumbing as fix_setid() but with a real cloud bundle (not forged).
     LegacyDfu handles smart-skip per component, so a 67MB bundle where most
     components are already current finishes in a few minutes.
+
+    isolate_siblings (default True): wrap the LegacyDfu invocation in
+    device_isolate.isolate() so multiple devices of the same model don't
+    cause the routing bug to land the update on the wrong unit. Same
+    safety mechanism fix-setid uses. Set False on hosts where you know
+    only one device of this model is connected.
 
     Returns dict with 'success' bool, 'message' str, and 'output' str.
     """
@@ -428,22 +435,30 @@ def install_bundle(zip_path, vid, pid, serial, timeout=900, log=print):
     if not zip_path.exists():
         return {"success": False, "message": f"bundle not found: {zip_path}"}
 
-    if not ensure_legacy_host_running():
-        return {"success": False,
-                "message": "LegacyHost.exe could not start or DFU pipe never appeared"}
-    log("LegacyHost DFU pipe is up")
-
     log(f"Installing bundle: {zip_path.name}")
     log(f"  VID=0x{vid:04X} PID=0x{pid:04X} serial={serial}")
-    log("  This may take several minutes — do not unplug the device.")
-    ok, output = run_legacy_dfu(zip_path, vid, pid, serial, timeout=timeout)
+    log("  This may take several minutes - do not unplug the device.")
+
+    if isolate_siblings:
+        from device_isolate import isolate as _isolate
+        ctx = _isolate(serial, vid, pid, log=log)
+    else:
+        import contextlib as _cl
+        ctx = _cl.nullcontext()
+
+    with ctx:
+        if not ensure_legacy_host_running():
+            return {"success": False,
+                    "message": "LegacyHost.exe could not start or DFU pipe never appeared"}
+        log("LegacyHost DFU pipe is up")
+        ok, output = run_legacy_dfu(zip_path, vid, pid, serial, timeout=timeout)
 
     if ok:
         return {"success": True,
                 "message": "Bundle install completed successfully.",
                 "output": output}
     return {"success": False,
-            "message": "LegacyDfu did not report 'DFU Complete: 100' — see output",
+            "message": "LegacyDfu did not report 'DFU Complete: 100' - see output",
             "output": output}
 
 

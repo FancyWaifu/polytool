@@ -24,6 +24,7 @@ Requires admin (uses Disable-PnpDevice / Enable-PnpDevice).
 
 import contextlib
 import ctypes
+import os
 import re
 import subprocess
 import sys
@@ -260,6 +261,15 @@ def isolate(target_serial: str, vid: int, pid: int, log=print):
         enable_devices(disabled, log=log)
         if lcs_was_running:
             _start_lcs(log=log)
+        # Safety net: if any HID child or Composite parent escalated to a
+        # CM_PROB_DISABLED state during the disable/re-enable churn, sweep
+        # them up here so the user isn't left with phantom-missing devices
+        # in Poly Studio. We've seen this happen when Disable-PnpDevice
+        # races a USB hub re-enumeration.
+        try:
+            reset_stuck_devices(log=log)
+        except Exception as e:
+            log(f"  isolate: WARNING - reset-pnp sweep failed: {e}")
         log("  isolate: done")
 
 
@@ -341,6 +351,85 @@ def _start_lcs(log=print) -> None:
     log("  isolate: watchdogs relaunched (LegacyHost + CallControlApp)")
 
 
+def reset_stuck_devices(log=print) -> dict:
+    """Find and re-enable any Poly device stuck in Error / CM_PROB_DISABLED
+    state. Useful as a safety net after fix-setid (where a partial isolate
+    failure can leave a HID child or USB Composite device disabled) and as
+    a standalone repair tool.
+
+    Walks every USB Composite + HID child under VID 0x047F (Plantronics)
+    and 0x05A7 (HP). Returns a dict with counts and the instance IDs we
+    re-enabled. Best-effort - failures are logged but don't raise.
+    """
+    if sys.platform != "win32":
+        return {"reset": 0, "checked": 0, "instances": []}
+
+    # Pull every Poly-VID PnP node currently known to Windows. Filter
+    # client-side because Get-PnpDevice's -InstanceId doesn't accept
+    # wildcards and we want one cmdlet call instead of many.
+    cmd = (
+        "Get-PnpDevice | Where-Object { "
+        "  ($_.InstanceId -like '*VID_047F*' -or $_.InstanceId -like '*VID_05A7*') "
+        "  -and $_.Status -eq 'Error' "
+        "} | Select-Object -ExpandProperty InstanceId"
+    )
+    out = _ps(cmd, timeout=15)
+    stuck = [line.strip() for line in out.splitlines() if line.strip()]
+
+    if not stuck:
+        return {"reset": 0, "checked": 0, "instances": []}
+
+    log(f"  reset-pnp: found {len(stuck)} Poly device(s) in Error state")
+    if not is_admin():
+        log("  reset-pnp: WARNING - not running elevated, can't re-enable")
+        return {"reset": 0, "checked": len(stuck), "instances": stuck}
+
+    # Re-enable in dependency order: USB Composite parents first (so their
+    # children can re-attach cleanly), then USB function nodes, then HID
+    # children. Sort key uses the bus path: shorter = higher in the tree.
+    stuck.sort(key=lambda i: (i.count("\\"), i))
+
+    quoted = ",".join(f"'{i}'" for i in stuck)
+    cmd2 = (
+        f"$ids = @({quoted}); "
+        f"foreach ($id in $ids) {{ "
+        f"  try {{ "
+        f"    Enable-PnpDevice -InstanceId $id -Confirm:$false -ErrorAction Stop; "
+        f"    Write-Host \"OK $id\" "
+        f"  }} catch {{ "
+        f"    Write-Host \"FAIL $id $($_.Exception.Message.Trim())\" "
+        f"  }} "
+        f"}}"
+    )
+    enable_out = _ps(cmd2, timeout=30)
+    reset_count = 0
+    for line in enable_out.splitlines():
+        if line.startswith("OK "):
+            reset_count += 1
+        elif line.startswith("FAIL "):
+            log(f"  reset-pnp: {line[5:]}")
+
+    log(f"  reset-pnp: re-enabled {reset_count}/{len(stuck)} device(s)")
+    return {"reset": reset_count, "checked": len(stuck), "instances": stuck}
+
+
+def cmd_reset_pnp(args):
+    """`polytool reset-pnp` entry point."""
+    from devices import out
+    if os.name != "nt":
+        out.error("reset-pnp is Windows-only.")
+        return
+    result = reset_stuck_devices(log=lambda s: out.print(f"  {s}"))
+    if result["checked"] == 0:
+        out.success("  No stuck Poly devices found - all healthy.")
+        return
+    if result["reset"] == result["checked"]:
+        out.success(f"  Reset {result['reset']}/{result['checked']} device(s).")
+    else:
+        out.warn(f"  Reset {result['reset']}/{result['checked']} device(s); "
+                 f"some still stuck (see log above).")
+
+
 __all__ = [
     "is_admin",
     "list_same_pid_devices",
@@ -348,4 +437,6 @@ __all__ = [
     "disable_devices",
     "enable_devices",
     "isolate",
+    "reset_stuck_devices",
+    "cmd_reset_pnp",
 ]
