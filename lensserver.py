@@ -207,6 +207,7 @@ class LensServer:
                         continue
                     clean_dev = {k: v for k, v in dev.items() if not k.startswith("_")}
                     _log(f"  ++ Device added: {dev.get('productName', '?')}")
+                    self._maybe_warn_ff_setid(dev)
                     self.broadcast({
                         "type": "DeviceAttached",
                         "apiVersion": API_VERSION,
@@ -801,18 +802,190 @@ class LensServer:
         })
         return None  # already broadcast
 
+    def _maybe_warn_ff_setid(self, dev):
+        """If a newly-attached device has FFFF SetID, log a one-line hint.
+
+        Reads LCS's own device cache files for the diagnosis; falls back
+        silently if the cache isn't available (Poly Lens not installed yet,
+        or device hasn't been seen by LCS before).
+        """
+        try:
+            from setid_fix import diagnose_setid
+        except Exception:
+            return
+        serial = dev.get("serialNumber") or dev.get("displaySerialNumber") or ""
+        if not serial:
+            return
+        try:
+            info = diagnose_setid(serial)
+        except Exception:
+            return
+        if info.get("state") != "ff":
+            return
+        name = dev.get("productName", "device")
+        _log(f"  ! {name}: unprogrammed SetID NVRAM (FirmwareVersion={info['firmware_version']!r})")
+        _log(f"  ! Fix:   polytool fix-setid       (fast, ~10 sec)")
+        _log(f"  !       polytool update-legacy   (full firmware update, ~10 min)")
+
     def on_schedule_dfu(self, msg, client_sock):
-        """Handle ScheduleDfuExecution — firmware update request."""
+        """Handle ScheduleDfuExecution — firmware update request.
+
+        Spawns a background thread that:
+          1. Looks up the latest cloud bundle for this device's PID
+          2. Downloads it to the firmware cache
+          3. Pauses our native bridge so LegacyHost can take over USB
+          4. Runs install_bundle() (LegacyDfu + LegacyHost pipeline)
+          5. Restarts our native bridge
+
+        Sends DfuExecutionStatus events back to the requesting client at
+        the major phase transitions (PreparingDevice → InProgress → Succeeded/Failed).
+        """
         device_id = msg.get("deviceId", "")
-        _log(f"  DFU scheduled for {device_id} (not implemented)")
+        request_id = msg.get("id", "")
+
+        with self._lock:
+            dev = self.devices.get(device_id)
+        if not dev:
+            return {
+                "type": "DfuExecutionStatus",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+                "dfuRequestId": request_id,
+                "status": "Failed",
+                "progress": 0,
+                "errorReason": f"Unknown device: {device_id}",
+            }
+
+        ptd = dev.get("_polytool_dev", {})
+        serial = dev.get("serialNumber") or dev.get("displaySerialNumber") or ""
+        pid_int = ptd.get("pid", 0)
+        vid_int = 0x047F  # Plantronics — only vendor we care about
+        if not serial or not pid_int:
+            return {
+                "type": "DfuExecutionStatus",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+                "dfuRequestId": request_id,
+                "status": "Failed",
+                "progress": 0,
+                "errorReason": "Device missing serial/pid metadata",
+            }
+
+        threading.Thread(
+            target=self._run_dfu_async,
+            args=(client_sock, device_id, request_id, vid_int, pid_int, serial),
+            daemon=True,
+        ).start()
+
+        # Initial response — Poly Studio shows "preparing" while we download
         return {
             "type": "DfuExecutionStatus",
             "apiVersion": API_VERSION,
             "deviceId": device_id,
-            "dfuRequestId": msg.get("id", ""),
-            "status": "NotSupported",
+            "dfuRequestId": request_id,
+            "status": "PreparingDevice",
             "progress": 0,
+            "firmwareDownloadStatus": "Pending",
         }
+
+    def _push_dfu_status(self, client_sock, device_id, request_id,
+                         status, progress=0, dl_status="", err=""):
+        """Send a DfuExecutionStatus event to a single client (best-effort)."""
+        try:
+            self.send_msg(client_sock, {
+                "type": "DfuExecutionStatus",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+                "dfuRequestId": request_id,
+                "status": status,
+                "progress": progress,
+                "firmwareDownloadStatus": dl_status or "Pending",
+                "errorReason": err,
+            })
+        except Exception as e:
+            _log(f"  DFU status push failed: {e}")
+
+    def _run_dfu_async(self, client_sock, device_id, request_id, vid, pid, serial):
+        """Background DFU worker. Releases native bridge for LegacyHost access."""
+        try:
+            from firmware import PolyCloudAPI
+            from setid_fix import install_bundle
+            from devices import PolyDevice
+
+            _log(f"  DFU starting: {serial} (PID 0x{pid:04X})")
+
+            cloud = PolyCloudAPI()
+            stub = PolyDevice(vid=vid, pid=pid, lens_product_id=f"{pid:04x}")
+            info = cloud.check_firmware(stub)
+            if not info or not info.get("download_url"):
+                _log(f"  DFU: no firmware available from Poly Cloud for PID 0x{pid:04X}")
+                self._push_dfu_status(client_sock, device_id, request_id,
+                                       "Failed", err="No firmware available")
+                return
+
+            url = info["download_url"]
+            _log(f"  DFU: downloading {info.get('latest', '?')} from cloud")
+            self._push_dfu_status(client_sock, device_id, request_id,
+                                   "PreparingDevice", dl_status="InProgress")
+            path = cloud.download_firmware(url)
+            if not path:
+                _log("  DFU: download failed")
+                self._push_dfu_status(client_sock, device_id, request_id,
+                                       "Failed", err="Bundle download failed")
+                return
+            _log(f"  DFU: bundle ready: {path}")
+
+            self._push_dfu_status(client_sock, device_id, request_id,
+                                   "InProgress", progress=0, dl_status="Completed")
+
+            # Release native bridge so LegacyHost can take over USB handles
+            paused = self._pause_native_bridge_for_dfu()
+
+            try:
+                _log("  DFU: running LegacyDfu (this can take several minutes)")
+                result = install_bundle(
+                    zip_path=path, vid=vid, pid=pid, serial=serial, log=_log,
+                )
+            finally:
+                if paused:
+                    self._resume_native_bridge_after_dfu()
+
+            if result["success"]:
+                _log("  DFU: success")
+                self._push_dfu_status(client_sock, device_id, request_id,
+                                       "Succeeded", progress=100, dl_status="Completed")
+            else:
+                _log(f"  DFU: failed — {result.get('message', 'unknown')}")
+                self._push_dfu_status(client_sock, device_id, request_id,
+                                       "Failed", err=result.get("message", "DFU failed"))
+        except Exception as e:
+            _log(f"  DFU thread crashed: {e}")
+            try:
+                self._push_dfu_status(client_sock, device_id, request_id,
+                                       "Failed", err=str(e))
+            except Exception:
+                pass
+
+    def _pause_native_bridge_for_dfu(self):
+        """Stop the native bridge so LegacyHost (spawned by install_bundle) can
+        get exclusive USB access. Returns True if a bridge was running, so the
+        caller knows to resume it after."""
+        if not self._native_bridge:
+            return False
+        try:
+            self._native_bridge.stop()
+        except Exception as e:
+            _log(f"  Could not stop native bridge cleanly: {e}")
+        self._native_bridge = None
+        return True
+
+    def _resume_native_bridge_after_dfu(self):
+        """Re-initialize native bridge after a DFU. Best-effort; if it fails
+        the next discovery cycle will try again."""
+        try:
+            self._get_native_bridge()
+        except Exception as e:
+            _log(f"  Native bridge restart failed: {e} (will retry on next scan)")
 
     def on_postpone_dfu(self, msg, client_sock):
         """Handle PostponeDFU — defer firmware update."""
