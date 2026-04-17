@@ -31,16 +31,33 @@ import sys
 from pathlib import Path
 
 
+_NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW - suppress console flash on Windows
+
+
 def _ps(cmd: str, timeout: int = 30) -> str:
     """Run a PowerShell command and return its stdout (stderr included on
-    error). All commands here are short and idempotent."""
+    error). All commands here are short and idempotent.
+
+    CREATE_NO_WINDOW prevents Windows from popping a visible console window
+    every time we shell out - matters because isolate runs powershell
+    several times per fix-setid / update, and a flurry of console flashes
+    looks like polytool is doing something sketchy."""
     r = subprocess.run(
         ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", cmd],
         capture_output=True, text=True, timeout=timeout,
+        creationflags=_NO_WINDOW if sys.platform == "win32" else 0,
     )
     if r.returncode != 0 and not r.stdout:
         return r.stderr or ""
     return r.stdout or ""
+
+
+def _run_silent(args, timeout=30):
+    """subprocess.run wrapper that suppresses the Windows console window."""
+    return subprocess.run(
+        args, capture_output=True, text=True, timeout=timeout,
+        creationflags=_NO_WINDOW if sys.platform == "win32" else 0,
+    )
 
 
 def is_admin() -> bool:
@@ -296,22 +313,19 @@ def _stop_lcs(log=print) -> bool:
     Returns True if LCS was running before we stopped it (so the caller
     knows to restart it later)."""
     # Was it running?
-    r = subprocess.run(["sc.exe", "query", _LCS_SERVICE_NAME],
-                       capture_output=True, text=True)
+    r = _run_silent(["sc.exe", "query", _LCS_SERVICE_NAME])
     was_running = "RUNNING" in (r.stdout or "")
 
     if was_running:
         log("  isolate: stopping Poly Lens Control Service...")
-        subprocess.run(["net.exe", "stop", _LCS_SERVICE_NAME],
-                       capture_output=True, text=True, timeout=30)
+        _run_silent(["net.exe", "stop", _LCS_SERVICE_NAME])
 
     # Belt-and-suspenders: kill any Poly children that may still be alive.
     # The watchdog must be killed too — otherwise it'll respawn LegacyHost
     # while we're trying to disable HID children.
     for proc in ("LegacyHost.exe", "PolyLensCallControlApp.exe",
                  "PolyLensProcessWatchdog.exe"):
-        subprocess.run(["taskkill.exe", "/F", "/IM", proc],
-                       capture_output=True, text=True)
+        _run_silent(["taskkill.exe", "/F", "/IM", proc])
     return was_running
 
 
@@ -324,14 +338,14 @@ def _start_lcs(log=print) -> None:
     no polytool/lensserver involved) see devices again. Skipping it leaves
     the user with a broken Studio until the next logon."""
     log("  isolate: restarting Poly Lens Control Service...")
-    r = subprocess.run(["net.exe", "start", _LCS_SERVICE_NAME],
-                       capture_output=True, text=True, timeout=30)
+    r = _run_silent(["net.exe", "start", _LCS_SERVICE_NAME])
     if r.returncode != 0:
         log(f"  isolate: WARNING - LCS restart failed: "
             f"{(r.stderr or r.stdout).strip()[:100]}")
 
     # Relaunch the per-user watchdogs (each watchdog respawns its target
-    # if the target dies). DETACHED_PROCESS so they outlive polytool.
+    # if the target dies). DETACHED + NO_WINDOW so they run silently
+    # in the background without flashing console windows.
     if not Path(_WATCHDOG_EXE).exists():
         return
     DETACHED = 0x00000008
@@ -341,7 +355,7 @@ def _start_lcs(log=print) -> None:
         try:
             subprocess.Popen(
                 [_WATCHDOG_EXE, target],
-                creationflags=DETACHED,
+                creationflags=DETACHED | _NO_WINDOW,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 close_fds=True,
             )
