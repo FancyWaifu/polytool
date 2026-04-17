@@ -611,3 +611,291 @@ CLOUD ENDPOINTS:
   Production: api.silica-prod01.io.lens.poly.com/graphql
   Auth: login.lens.poly.com (Auth0 client: eeR97uW60MAHOm5l3e5b4nj07nHQGJtd)
   IoT Hub: Azure IoT Hub via DPS (global.azure-devices-provisioning.net)
+
+
+================================================================================
+11. SETID — DEVICE IDENTITY/MANIFEST VERSION (FFFFFFFF problem)
+================================================================================
+
+THE SYMPTOM:
+  Some Savi DECT headsets (observed on AC28 / Savi 7320) report
+  firmwareVersion.setId as {build:ffff, major:ffff, minor:ffff, revision:ffff}.
+  Poly Studio / Poly Lens treats those values as real, breaks version comparison,
+  shows blank firmware version, refuses updates, disables capability gates.
+
+WHAT SETID ACTUALLY IS:
+  - 4-tuple of 16-bit words stored in headset NVRAM
+  - Display format: "<word1>.<word2>.<word3>.<word4>" (dot-joined, e.g. "0.0.2134.3260")
+  - LCS uses it as the canonical FirmwareVersion when no usb/headset version is set
+  - Read by LCS via PolyBus REST: GET /device/settings?name="Set ID"
+  - Also exposed via firmwareVersion JSON sub-block under key "setid"
+  - 0xFFFF in all four fields = unprogrammed NVRAM (factory state)
+
+DEVICES THAT USE SETID (from dfu.config):
+  Savi DECT family: AC28 (Savi 7320), other AC2x variants
+  Voyager Focus 2 series: PID 154, 162
+  Voyager 4310/4320 series: PID 167, 169, 16A, 16C
+  Sync 10/20/40/60 series: PIDs 15C-161, 163-166, 16D, 171
+  Voyager Surround 80/85: PID 16E, 17C
+  Voyager Free 60+ Charge Case: PID 172
+  Voyager Legend 30/50: PID 17D, 17E
+  HP Poly Mission 415/425 Classic: PID 1C2, 2C2
+  HP Poly Focus Premium Charge Stand: PID 2C0
+  Penguin: PID 0154
+  Penguin Stand: PID 0162
+  Gorilla Personal/Teams/Flex/Huddle: PIDs 015C-0166, 016D
+  All map "SetID": "SetID" handler in dfu.config DFUHandlers block
+
+THE C++ WRITER (PolyBus.dll, found via strings):
+  BusDevice::SetDeviceFirmwareVersion()
+    - Source: D:\agent\_work\1\s\Enumerator\PolyBus\BusDevice.cpp
+    - Validates input format ("Invalid version string" error path)
+    - Writes the dotted version string to device NVRAM
+    - Called from DeviceTaskInit::run() at device-attach time, NOT during DFU
+
+  This is the ONLY known SetID writer at any layer. It runs automatically
+  when PolyBus initializes a device that has a setid value to set.
+
+WHERE THE SETID VALUE COMES FROM (cloud bundle rules.json):
+  Cloud bundles for SetID-capable devices include a metadata-only component:
+
+    {
+      "type": "setid",
+      "pid": "0x0167",
+      "version": "0.0.2134.3260",
+      "description": "Set ID values written to device after DFU",
+      "filename": "",        <-- NO file, version IS the data
+      "maxDuration": 2
+    }
+
+  Verified present in: Voyager 4320 bundle (PID 167)
+  Verified ABSENT from: AC28 (Savi 7320), AC2B (Savi 8210), all Savi DECT bundles
+    examined. This is why SetID never gets written for Savi 7320/7300/8210
+    via the normal cloud-update flow — the bundle simply has no value for it.
+
+WHY THE FFs PERSIST ON AC28:
+  1. AC28 NVRAM ships from factory with FFs in the SetID region
+     (factory programming step skipped for some units)
+  2. AC28's cloud bundle has no setid component
+  3. PolyBus's DeviceTaskInit::run() never has a value to call
+     SetDeviceFirmwareVersion with → the FFs stay forever
+  4. LCS forwards the FFs to Poly Studio → Studio chokes on them
+
+DEAD ENDS DOCUMENTED (so future RE doesn't repeat them):
+  - PolyBus has no SetGenericSettingAsync — generic settings are read-only
+  - NativeLoader.dll exposes GetGeneralSettings/SetGeneralSettings as JSON
+    messages, but SetGeneralSettings hits Studio camera/host config (NTP,
+    region, device_name), NOT per-device generic settings
+  - GetSingleDeviceSetting works; no SetSingleDeviceSetting equivalent exists
+  - Sending {"name": "Set ID"} via SetDeviceSettings JSON message returns
+    "type must be string, but is null" — the protocol requires a hex id field,
+    not a name
+  - Sending {"id": "Set ID"} variants in any case form return "Invalid or
+    Unknown Request"
+  - Searched all 5 LCS .NET DLLs (Devices, DeviceLibraries, DfuExecution,
+    DfuValidation, Executors) — zero SetSetting writes for "Set ID" anywhere
+  - LCS's FirmwareComponentsVersionsParsers extracts setid via
+    dictionary.GetValueOrDefault("setId") — case-mismatches lowercase "setid"
+    in rules.json; appears to be a latent bug (or relies on case-insensitive
+    dictionary at deserialization time)
+
+LCS DEVICE CACHE FORMAT (proof of FF state):
+  %PROGRAMDATA%\Poly\Lens Control Service\device_PLT_<serial>
+  AC28 cache observed:
+    "FirmwareVersion": "ffff.ffff.ffff.ffff"
+    "FirmwareComponents": { ..., "setid": "ffff.ffff.ffff.ffff" }
+  Voyager 4320 cache observed:
+    "FirmwareVersion": "0.0.2134.3260"  <-- proper SetID-derived version
+    "FirmwareComponents": { ..., "setid": "" }
+  AC27 (older Savi 7310) cache:
+    "FirmwareVersion": "" / "setid": ""  <-- field present but never populated
+
+EDFU EXECUTOR INVOCATION (for reference, NOT the SetID path):
+  AC28 routes to LegacyDfu.exe per LegacyDfu.supportedDevices.json
+  Command line built by DfuExecution/DfuExecutor.cs:
+    LegacyDfu.exe -v <vid> -p <pid> [-l <lang>] -f "<firmware.fwu|.zip>"
+                  [--silentaudio] [--address <a> | --serial <sn>] [--force]
+                  --ignore_crc --ignore_version_check
+  This handles base/headset/pic/tuning/lang components from the bundle. SetID
+  is dispatched separately by PolyBus's init task, not the eDfu executors.
+
+FIX OPTIONS (RANKED) for new machines without lensserver MITM:
+
+  Fix #1 — Forge a bundle with a synthetic setid component
+    Take the real cloud bundle .zip, edit rules.json to add a setid block
+    with a chosen version string (e.g. "0001.0000.0000.0001" or a value
+    derived from the bundle's headset/usb versions like "0000.043A.0429.0BDE"
+    for bundle 1082.1065.3038), repackage. Trigger DFU through Poly Lens
+    using the modified bundle. PolyBus's DeviceTaskInit will run
+    SetDeviceFirmwareVersion with our value.
+    Effort: ~3 hours. Risk: medium (NVRAM write, irreversible if string
+    format wrong). Best for: actually fixing the device permanently.
+
+  Fix #2 — Call PolyBus.dll directly via ctypes
+    Load clockwork/PolyBus.dll, use poly_bus_request C export with a
+    crafted JSON payload that triggers SetDeviceFirmwareVersion internally.
+    Need to discover exact resourceId/method combo (not yet known).
+    Effort: ~1 day RE. Risk: low (can verify before write). Best for: a
+    standalone polytool fix-setid CLI command.
+
+  Fix #3 — Lensserver MITM sanitizer (already shipped)
+    Strip FF sub-blocks from firmwareComponents before forwarding to clients.
+    Implemented in lensserver.py:_sanitize_firmware_components() (commit
+    b5e4124). Solves the user-visible problem but only when our lensserver
+    is the active LCS replacement on that machine.
+    Effort: done. Risk: none. Best for: machines running our lensserver.
+
+VERSION FORMAT NOTES:
+  - Each of the 4 words appears to be a 16-bit value (max 0xFFFF)
+  - Display can be either decimal ("0.0.2134.3260") or hex ("ffff.ffff.ffff.ffff")
+    depending on which device reports it — needs further investigation
+  - "Invalid version string" error from BusDevice::SetDeviceFirmwareVersion
+    suggests strict parsing; safest format mirrors the cloud bundle convention
+    (decimal dotted)
+
+
+================================================================================
+11.A. SETID — WORKING PERMANENT FIX (verified on AC28 / Savi 7320)
+================================================================================
+
+STATUS: SOLVED. The NVRAM write path is identified, executed end-to-end,
+verified by readback. Fix shipped as `polytool fix-setid` CLI command.
+
+THE WORKING MECHANISM:
+  1. LegacyHost.exe (Poly's C++ device manager) listens on
+     \\.\pipe\LegacyHostDfuServer when running. Pipe only exists while
+     LegacyHost.exe is alive — start it manually if needed.
+  2. LegacyDfu.exe is a thin client that connects to that pipe and dispatches
+     firmware update requests. It's NOT a HID writer itself — it forwards
+     bundle contents to LegacyHost which performs the actual NVRAM write
+     via PLTDeviceManager.
+  3. A bundle .zip with rules.json containing only a `type: "setid"` component
+     is enough — no .fwu files needed. LegacyHost recognizes the setid type
+     ("componentType": "probably setid" appears in NOTIFY_PROGRESS messages)
+     and writes the version string from rules.json directly to the device's
+     SetID NVRAM region.
+
+THE EXACT JSON FORMAT (rules.json):
+    {
+        "version": "<dotted-string>",
+        "type": "firmware",
+        "components": [{
+            "type": "setid",
+            "pid": "0xAC28",
+            "version": "<dotted-string>",
+            "filename": "",
+            "maxDuration": 2
+        }]
+    }
+
+THE EXACT INVOCATION:
+    LegacyDfu.exe -v <vid_decimal> -p <pid_decimal>
+                  -f "<absolute_windows_path_to_bundle.zip>"
+                  --serial <32-char-serial>
+                  --ignore_crc --ignore_version_check --loglevel 3
+
+  Path MUST be an absolute Windows path (e.g.
+  C:\Users\...\Temp\setid_test\forged.zip), not a Unix-style or relative
+  path — LegacyHost rejects with code 119 "The firmware archive could not
+  be found".
+
+PROGRESS MESSAGES TO WATCH (from LegacyDfu stdout, --loglevel 3):
+    Received message through pipe: {"command":"NOTIFY_PROGRESS",
+        "data":{"componentType":"probably setid",
+                "componentsNumber":0,
+                "overallPercentage":100,
+                "percentage":100,"phase":"update"}}
+    DFU Complete:   100 %
+  Process exits 0. THIS is the success signature.
+
+VERIFIED BEFORE/AFTER (AC28 / Savi 7320, serial 049160FE6715450F8A4FB2C44EA91AD2):
+  Before write (NVRAM unprogrammed):
+    setId = {build:"ffff", major:"ffff", minor:"ffff", revision:"ffff"}
+    LCS-displayed FirmwareVersion = "ffff.ffff.ffff.ffff"
+  Sent dotted string: "0001.0000.0000.0001"
+  After write:
+    setId = {major:"1", minor:"0", revision:"0", build:"1"}
+    LCS-displayed FirmwareVersion = "1.0.0.1"
+  Persists across LCS restart, LegacyHost restart, USB unplug/replug.
+
+THE FORMAT MAPPING (we figured this out):
+  The dotted version-string is in version-significance order:
+    "<major>.<minor>.<revision>.<build>"
+  But the device's JSON response uses ALPHABETICAL keys (build, major,
+  minor, revision) — easy source of confusion. Reading "build:1, major:1,
+  minor:0, revision:0" alphabetically as a tuple does NOT match the dotted
+  display "1.0.0.1" — instead the display is keyed-by-significance.
+
+DEAD ENDS WORTH KNOWING (so future investigators don't repeat them):
+
+  - LCS device cache edit (\Lens Control Service\device_PLT_*): LegacyHost
+    re-reads NVRAM on every device attach and overwrites the cache within
+    seconds. Useless for permanent fix.
+
+  - Direct PolyBus REST writes via poly_bus_request: tried 23 combinations
+    of (method, resource_id, params) — none reach SetDeviceFirmwareVersion.
+    All settings/generic write paths return "not supported" or
+    "Invalid device Id". The C++ writer is only triggered internally from
+    DeviceTaskInit::run() during init when bundle metadata supplies a value.
+
+  - Standalone PolyBus.dll init via ctypes: succeeds in loading, devices
+    enumerate as state="Initializing" then transition to "Bricked" within
+    ~30s because we lack the additional internal callbacks LCS provides
+    during full discovery. Not a hardware brick — just PolyBus's internal
+    state label for "init didn't complete." Devices recover normally when
+    LCS+LegacyHost restart.
+
+  - Frida-injected poly_bus_request into running LCS using captured
+    long-form device IDs (e.g. "1125933431"): "Request Failed Error:1"
+    via Legacy Library route, "Invalid device Id" via PolySync route.
+    The setting "Set ID" is not in AC28's typed-settings catalog (66
+    settings exposed, none named "Set ID") so SET requests fail at the
+    setting-name validation step regardless of routing.
+
+  - Cloud bundle modification: AC28's official cloud bundle (1082.1065.3038)
+    has NO setid component. Building one ourselves works (it's the
+    successful path above). LCS's FromRulesJsonDocument parser uses
+    `dictionary.GetValueOrDefault("setId")` (camelCase) but rules.json
+    convention is "setid" (lowercase) — case-mismatch is a latent LCS
+    bug, but ImmutableDictionary deserialization may be case-insensitive
+    so it's not necessarily broken in practice.
+
+THE ACTUAL CALL CHAIN (end-to-end):
+  polytool fix-setid <serial>
+       │
+       ├─ build_setid_bundle()   creates rules.json-only zip
+       ├─ ensure_legacy_host_running()   starts LegacyHost.exe if needed
+       └─ run_legacy_dfu()  → LegacyDfu.exe -v -p -f forged.zip
+                                  │ named-pipe IPC
+                                  ▼
+                          LegacyHost.exe (CBridgeDFURequestListener)
+                                  │ ctypes
+                                  ▼
+                          PLTDeviceManager.dll (HID write to device NVRAM)
+
+API IMPORT FOOTPRINT:
+  LegacyDfu.exe imports only KERNEL32.dll + ADVAPI32.dll — no hid.dll, no
+  WinUSB. All HID work is done inside LegacyHost.exe.
+  LegacyHost imports include CreateNamedPipeA / SetNamedPipeHandleState /
+  ConnectNamedPipe — confirms named-pipe IPC architecture.
+
+PIPE NAMES (from LegacyHost.exe strings):
+  \\.\pipe\LegacyHostDfuServer       — DFU operations (CBridgeDFUService)
+  \\.\pipe\ClockworkLegacyServer     — call-control + general device ops
+                                       (always available when LCS runs;
+                                        created by PolyBus.dll inside LCS)
+
+ERROR CODES OBSERVED:
+  600 — "Cannot connect to LegacyHost application" (pipe not up)
+  602 — "Legacy DFU failed" (generic LegacyDfu wrapper failure)
+  119 — "The firmware archive could not be found" (path not found by
+        LegacyHost — use absolute Windows path)
+
+REPRODUCIBLE COMMAND LINE (manual, no polytool wrapper):
+  echo '{"version":"0001.0000.0000.0001","type":"firmware","components":[{"type":"setid","pid":"0xAC28","version":"0001.0000.0000.0001","filename":"","maxDuration":2}]}' > rules.json
+  zip forged.zip rules.json
+  start "" "C:\Program Files\Poly\Poly Studio\LegacyHost\LegacyHost.exe"
+  "C:\Program Files\Poly\Lens Control Service\eDfu\LegacyDfu.exe" \
+     -v 1151 -p 44072 -f "C:\full\path\to\forged.zip" \
+     --serial 049160FE6715450F8A4FB2C44EA91AD2 \
+     --ignore_crc --ignore_version_check --loglevel 3

@@ -62,6 +62,8 @@ from scanner import (
     _select_devices,
 )
 
+from setid_fix import cmd_fix_setid, DEFAULT_SETID
+
 
 # ── Main Entry Point ─────────────────────────────────────────────────────────
 
@@ -114,6 +116,24 @@ def main():
     fwinfo_parser = subparsers.add_parser("fwinfo", help="Analyze a firmware package (zip or directory)")
     fwinfo_parser.add_argument("path", help="Path to firmware zip, directory, or single .fwu/.bin/.dfu file")
 
+    # fix-setid
+    setid_parser = subparsers.add_parser(
+        "fix-setid",
+        help="Write a fresh SetID to NVRAM (fixes the FFFFFFFF firmware version bug)",
+    )
+    setid_parser.add_argument("device", nargs="?", default="all",
+                              help="Device # / serial / pid / 'all' (default: all)")
+    setid_parser.add_argument("--version", default=DEFAULT_SETID,
+                              help=f"SetID dotted '<major>.<minor>.<revision>.<build>' (default: {DEFAULT_SETID})")
+    setid_parser.add_argument("--dry-run", action="store_true",
+                              help="Forge the bundle but don't run LegacyDfu")
+    setid_parser.add_argument("--force", action="store_true",
+                              help="Skip the prompt for valid-looking devices")
+    setid_parser.add_argument("--yes", "-y", action="store_true",
+                              help="Skip confirmation prompts")
+    setid_parser.add_argument("--verbose", action="store_true",
+                              help="Print full LegacyDfu output on failure")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -132,6 +152,7 @@ def main():
         "monitor": cmd_monitor,
         "catalog": cmd_catalog,
         "fwinfo": cmd_fwinfo,
+        "fix-setid": cmd_fix_setid,
     }
 
     cmd_func = commands.get(args.command)
