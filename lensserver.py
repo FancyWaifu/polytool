@@ -464,7 +464,57 @@ class LensServer:
             # Push battery info if available
             self._push_battery(client_sock, did)
 
+            # Push firmware-update status. Studio doesn't poll for this -
+            # it relies on LCS to notify proactively. Without this push
+            # the Update Available button never renders even when our
+            # DFU cache correctly knows a newer version exists.
+            self._push_dfu_status_to_client(client_sock, did)
+
         return None
+
+    def _push_dfu_status_to_client(self, client_sock, device_id):
+        """Send DeviceDFUStatus + AvailableSoftwareUpdate for one device
+        to one client. Used in the on_register loop so newly-connecting
+        Studio instances get update availability without having to ask.
+
+        If the DFU cache hasn't been populated yet (rare race - device
+        attached but cloud check still in flight), skip silently. The
+        broadcast in _prewarm_dfu_cache will catch this client too once
+        the cache populates."""
+        cached = self._dfu_cache.get(device_id)
+        if not cached:
+            return
+        with self._lock:
+            dev = self.devices.get(device_id, {})
+        current = dev.get("firmwareVersion", "")
+        latest = cached.get("version", "")
+        statuses = cached.get("statuses", [])
+
+        try:
+            self.send_msg(client_sock, {
+                "type": "DeviceDFUStatus",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+                "version": latest,
+                "statuses": statuses,
+                "releaseNoteUrl": cached.get("releaseNoteUrl", ""),
+            })
+            self.send_msg(client_sock, {
+                "type": "AvailableSoftwareUpdate",
+                "apiVersion": API_VERSION,
+                "deviceId": device_id,
+                "availableVersion": latest,
+                "currentVersion": current,
+                "statuses": statuses,
+                "canPostpone": True,
+                "component": "firmware",
+                "releaseNoteUrl": cached.get("releaseNoteUrl", ""),
+            })
+            _log(f"  -> DFU status to {dev.get('productName', '?')}: "
+                 f"{', '.join(statuses) if statuses else 'no updates'}",
+                 verbose_only=True)
+        except Exception as e:
+            _log(f"  push DFU to client failed: {e}", verbose_only=True)
 
     def _push_battery(self, client_sock, device_id):
         """Push battery info as a compound DeviceSetting."""
