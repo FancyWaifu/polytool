@@ -1,430 +1,155 @@
 # PolyTool
 
-Open-source toolkit for managing Poly/Plantronics USB headsets. Drop-in replacement for the official Poly Lens desktop app — includes a web dashboard, CLI tools, a drop-in LensService replacement that serves devices directly to the Poly Studio GUI with full settings control, firmware flashing, and enterprise fleet management.
-
-## Features
-
-- **LensServer** — Drop-in Poly Lens Control Service replacement. Poly Studio GUI connects to it and displays your devices with full settings controls, product images, battery status, and firmware info — no official Poly software required.
-- **Native Bridge** — Direct ctypes interface to Poly's native libraries. Discovers USB and Bluetooth devices, reads/writes all settings on any Poly headset including DECT and Voyager series. No legacyhost or Clockwork needed.
-- **Dynamic Settings** — Automatically detects what settings each headset supports and builds a matching profile. 72 known setting IDs across all device families with canonical per-device profiles for 217 devices loaded from Poly's own DeviceSettings.zip. Plug in any Poly headset and its settings just work.
-- **Web Dashboard** — Lightweight Flask app for device management, firmware updates, and settings at `localhost:8420`
-- **Firmware Flashing** — Download from Poly Cloud CDN and flash directly over USB HID with identity preservation
-- **Fleet Management** — Central PostgreSQL server with agent-based reporting, policy enforcement, and compliance monitoring
-- **Remote Configuration** — Push settings changes to headsets across your network
-- **Interactive Menu** — Terminal UI for all device operations, firmware tools, and protocol debugging
-- **HTTP REST API** — Query devices, settings, battery, and native bridge status via HTTP. Built-in at `localhost:8080/api` — ready for PowerShell, curl, or any HTTP client
-- **Test Suite** — 133 tests (100 unit + 33 integration) covering settings resolution, device identification, protocol parsing, and live API endpoint validation
-- **Protocol Research** — HID probes, DECT settings write protocol discovery, and reverse-engineered documentation
-
-## Quick Start
-
-```bash
-pip install hidapi requests flask
-
-# Start the server — Poly Studio connects automatically
-# HTTP API available at http://localhost:8080/api
-python3 lensserver.py
-
-# Or with verbose mode for debugging
-python3 lensserver.py --verbose
-
-# Custom HTTP API port (or 0 to disable)
-python3 lensserver.py --http 9000
-```
-
-## Supported Devices
-
-| Device | Flash | Settings | Protocol |
-|--------|-------|----------|----------|
-| Blackwire 3220 | Yes | Dialtone | CX2070x EEPROM |
-| Blackwire 5xx | Yes | Dialtone | CX2070x EEPROM |
-| Blackwire 3310/3315/3320/3325 | Yes | Full (17 settings) | BladeRunner HID |
-| Blackwire 7225/8225 | Yes | Full (17 settings) | BladeRunner HID |
-| Savi 7310/7320/7410/7420 | Yes | Full (38 settings) | Native Bridge / DECT |
-| Savi 8200/8210/8220/8410/8420 | Yes | Full (38 settings) | Native Bridge / DECT |
-| Voyager 4320/Focus 2/Free 60 | Untested | Full (36 settings) | Native Bridge / BT |
-| Voyager Base-M CD | — | Full (6 settings) | Native Bridge / BT |
-| Sync 20/40/60 | Yes | Full (17 settings) | BladeRunner HID |
-| EncorePro 310/320/515/525/545 | Yes | Full (17 settings) | BladeRunner HID |
-| Any other Poly headset | — | Auto-detected (217 PIDs) | Native Bridge |
-
-Settings for any Poly headset are auto-detected via the native bridge — no manual profiles needed.
-
-## Tools
-
-| File | Description |
-|------|-------------|
-| `lensserver.py` | Drop-in Poly Lens Control Service replacement (TCP + HTTP API) |
-| `http_api.py` | REST API server for device queries, settings, and automation |
-| `devices.py` | Device constants, maps, discovery, and PolyDevice dataclass |
-| `firmware.py` | Firmware parsing, cloud API, BladeRunner DFU, updater |
-| `scanner.py` | CLI commands (scan, info, battery, updates, flash, catalog) |
-| `polytool.py` | CLI entry point (re-exports from devices/firmware/scanner) |
-| `native_bridge.py` | Direct ctypes interface to Poly's native dylibs for DECT/BT settings |
-| `lensapi.py` | TCP client for LensServiceApi — query devices, read/write settings, monitor events |
-| `polylens.py` | Web dashboard (Flask) for single-workstation device management |
-| `menu.py` | Interactive terminal menu with device, firmware, and debug submenus |
-| `lens_settings.py` | Settings profiles, API format, PREFER_OFFICIAL_SETTINGS flag |
-| `device_settings_db.py` | Canonical settings database from DeviceSettings.zip (217 devices, 72 settings) |
-| `device_settings.py` | Direct HID settings read/write with Poly Studio name translation |
-| `polyserver.py` | Fleet management server (PostgreSQL) |
-| `polyagent.py` | Workstation agent for fleet reporting |
-| `polyremote.py` | CLI for remote settings changes with JSON presets |
-| `fwu_flash.py` | Savi DECT firmware flasher (FWU API / CVM mailbox) |
-| `bw_flash.py` | Blackwire 3220 EEPROM flasher (CX2070x S-record) |
-| `device_identity.py` | Device identity preservation during flash |
-| `polybus.py` | Native PolyBus library interface (ctypes) |
-| `monitor_legacyhost.py` | Poly Lens log file monitor with pattern highlighting |
-| `probes/` | HID protocol research and testing tools |
-| `tests/` | 133 tests (unit + integration) |
-
-## LensServer — Poly Studio Integration
-
-Replace the official Poly Lens Control Service with our open-source implementation. Poly Studio GUI auto-connects and displays your devices with full settings controls.
-
-```bash
-python3 lensserver.py              # Auto-assigns port, writes port file
-python3 lensserver.py --port 9001  # Fixed port
-python3 lensserver.py --dump       # Log all messages to dump.jsonl
-```
-
-**How it works:**
-1. Scans for USB devices via HID and Bluetooth devices via native bridge
-2. Starts a TCP server speaking the LensServiceApi protocol (SOH-delimited JSON)
-3. Writes the port number to `~/Library/Application Support/Poly/Lens Control Service/SocketPortNumber`
-4. Poly Studio GUI connects automatically
-5. Serves device info, product images (from Poly Cloud), settings metadata, setting values, and battery status
-6. Settings writes go through direct HID (CX2070x/BladeRunner) or native bridge (DECT/Voyager/BT)
-7. Restores the original LCS port file on shutdown so the real Poly Lens keeps working
-
-**Features:**
-- Dynamic settings profiles — any Poly headset gets its settings auto-detected
-- Battery display in Poly Studio for devices with battery reporting
-- Bluetooth headset discovery through USB docks (e.g. Voyager 4320 via Base-M CD)
-- Call/mute state tracking from native bridge events
-- Product images from Poly Cloud GraphQL API
-- Live hotplug detection via background scanner thread
-- Built-in HTTP REST API for automation and testing
-
-## HTTP REST API
-
-LensServer includes a built-in HTTP API at `http://localhost:8080/api` for querying devices, settings, and server status. No additional dependencies required.
-
-```bash
-# List all devices
-curl http://localhost:8080/api/devices
-
-# Get settings for a device (by ID, prefix, or name)
-curl http://localhost:8080/api/devices/Blackwire/settings
-curl http://localhost:8080/api/devices/047fc056/settings
-
-# Write a setting
-curl -X POST http://localhost:8080/api/devices/047fc056/settings \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Dialtone On/Off", "value": false}'
-
-# Server health
-curl http://localhost:8080/api/health
-
-# Native bridge status
-curl http://localhost:8080/api/native-bridge
-```
-
-**PowerShell:**
-```powershell
-# List devices
-Invoke-RestMethod http://localhost:8080/api/devices
-
-# Get settings
-Invoke-RestMethod http://localhost:8080/api/devices/Blackwire/settings
-
-# Write a setting
-Invoke-RestMethod -Method Post -Uri http://localhost:8080/api/devices/047fc056/settings `
-  -Body '{"name":"Dialtone On/Off","value":false}' -ContentType application/json
-```
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Server status, uptime, device/client counts |
-| `/api/devices` | GET | List all connected devices |
-| `/api/devices/:id` | GET | Device detail (by ID, prefix, or name match) |
-| `/api/devices/:id/settings` | GET | Full settings with metadata and values |
-| `/api/devices/:id/settings` | POST | Write a setting `{name, value}` |
-| `/api/devices/:id/battery` | GET | Battery status |
-| `/api/devices/:id/dfu` | GET | Firmware update status |
-| `/api/devices/:id` | DELETE | Remove/forget a device |
-| `/api/settings/profiles` | GET | Settings profiles and zip database info |
-| `/api/native-bridge` | GET | Native bridge status and devices |
-
-## Native Bridge
-
-Direct ctypes interface to Poly's `libNativeLoader.dylib` + `libPLTDeviceManager.dylib`. Handles all USB HID and Bluetooth communication for DECT/Voyager settings — the same libraries the official Poly Lens uses internally.
-
-```bash
-python3 native_bridge.py              # Discover devices and settings
-python3 native_bridge.py --set 0x10a medium  # Set Base Ringer Volume
-python3 native_bridge.py --get        # Query all settings
-```
-
-**72 known setting IDs** covering: sidetone, noise exposure, DECT density, power level, auto-answer, mute alerts, ringtones, volume controls, wearing sensor, online indicator, ANC mode, transparency mode, equalizer, custom button, caller ID, A2DP, quick disconnect, audio bandwidth, anti-startle, and more. Canonical per-device profiles for 217 devices loaded from Poly's DeviceSettings.zip.
-
-**Supports:** Any device that Poly's native library can communicate with — DECT base stations, Bluetooth headsets paired through USB docks, and USB-connected devices.
-
-## LensAPI Client
-
-Direct TCP client for the LensServiceApi protocol — works with both the real Poly Lens service and our LensServer.
-
-```bash
-python3 lensapi.py devices                        # List connected devices
-python3 lensapi.py discover                        # Full device + settings discovery
-python3 lensapi.py settings <device_id>            # Read all settings
-python3 lensapi.py get <device_id> "Sidetone"      # Read one setting
-python3 lensapi.py set <device_id> "Sidetone" "high"  # Write a setting
-python3 lensapi.py dump                            # Export everything as JSON
-python3 lensapi.py monitor                         # Watch real-time events
-```
-
-## Web Dashboard
-
-```bash
-python3 polylens.py                    # Opens browser to localhost:8420
-python3 polylens.py --port 9000        # Custom port
-python3 polylens.py --no-browser       # Don't auto-open browser
-```
-
-- **Devices** — Connected headsets with firmware version, battery, serial number. Auto-refreshes.
-- **Updates** — Check Poly Cloud for new firmware, download, and flash with one click.
-- **Settings** — Sidetone, EQ, noise limiting, wearing sensor, language, and more per device.
-- **Catalog** — Search all Poly firmware online.
-- **Firmware Library** — Browse locally cached firmware packages.
-
-Integrates with Clockwork/LensAPI when available, falls back to direct HID.
-
-## CLI Usage
-
-```bash
-python3 polytool.py scan              # Discover devices
-python3 polytool.py info              # Detailed device info
-python3 polytool.py battery           # Battery status
-python3 polytool.py updates           # Check for firmware updates
-python3 polytool.py update            # Download and flash firmware
-python3 polytool.py update --force    # Flash even if up to date
-python3 polytool.py catalog           # Search Poly firmware catalog
-python3 polytool.py fwinfo <path>     # Analyze a firmware package
-python3 polytool.py monitor           # Live auto-refreshing dashboard
-python3 menu.py                       # Interactive terminal menu
-```
-
-## Fleet Management
-
-Central server for managing headsets across an organization.
-
-**Server** (`polyserver.py`):
-```bash
-# Requires PostgreSQL
-python3 polyserver.py --db postgresql://user:pass@localhost/polytool
-```
-API keys are auto-generated on first run and printed to the console.
-
-**Agent** (`polyagent.py`):
-```bash
-# Run on each workstation — reports devices every 60s
-python3 polyagent.py --server http://server:8421 --key <agent_key>
-
-# Single report and exit
-python3 polyagent.py --server http://server:8421 --key <agent_key> --once
-```
-
-**Admin Dashboard** at `http://server:8421`:
-- **Overview** — Device counts, firmware versions, online agents, recent activity
-- **Devices** — Every headset across the org with online/offline status, host, user
-- **Compliance** — Policy violations with details per device
-- **Policies** — Enforce firmware versions and settings across the fleet
-- **Commands** — Push settings changes to all agents
-- **Audit Log** — Full activity history
-
-**Security:** API key auth (HMAC constant-time comparison), rate limiting (120 req/min per IP), input validation on all endpoints, keys stored with restricted file permissions.
-
-## PolyRemote
-
-Standalone CLI for headset settings. Coexists with Poly Lens — does not modify firmware or the managed client.
-
-```bash
-python3 polyremote.py list                                # List devices
-python3 polyremote.py set "Sidetone Level" 5              # Change a setting
-python3 polyremote.py set "Ringtone Volume" 8 --pid 0xACFF  # Target specific device
-python3 polyremote.py get "Sidetone Level"                # Read a setting
-python3 polyremote.py dump                                # Dump all settings
-python3 polyremote.py batch presets/office_standard.json   # Apply preset
-python3 polyremote.py settings                            # List available settings
-```
-
-JSON output for automation (auto-enabled when piped):
-```bash
-python3 polyremote.py list --json | jq '.devices[].name'
-python3 polyremote.py dump --json > device_report.json
-```
-
-Included presets in `presets/`:
-- `office_standard.json` — Standard office config (sidetone 3, ringtone 7, HD Voice on)
-- `call_center.json` — High-volume call center (auto-answer on, ringtone 10, noise limiting on)
-- `quiet_mode.json` — Minimal audio feedback
-
-## Firmware Flashing
-
-Three protocols, all reverse-engineered from Poly Lens:
-
-**CX2070x EEPROM** (Blackwire 3220) — S-record patches to Conexant EEPROM via HID. Automatically preserves serial number and calibration data at EEPROM offsets 0x0020-0x0083.
-
-**FWU API** (Savi series) — CVM mailbox protocol with LE 16-bit primitive IDs. Tested: 4,915 blocks, 991 KB, 89 seconds. Requires USB reset on macOS before input report reads.
-
-**BladeRunner FTP** (Blackwire 33xx, 7225, 8225, Sync, EncorePro) — File transfer over HID with handshake, block writes, and CRC32 verification.
-
-## Log Monitor
-
-Watch Poly Lens log files in real time with color-coded pattern highlighting:
-
-```bash
-python3 monitor_legacyhost.py          # Monitor legacyhost logs
-python3 monitor_legacyhost.py --all    # Monitor all log sources (legacyhost, Clockwork, LCS)
-python3 monitor_legacyhost.py --raw    # Show all lines, not just interesting patterns
-```
-
-Highlights HID reports (green), DFU events (yellow), errors (red), and IPC commands (cyan).
-
-## Protocol Probes
-
-Research tools for reverse engineering Poly USB HID protocols:
-
-```bash
-python3 probes/fwu_probe.py --test passive              # Safe read-only scan
-python3 probes/fwu_probe.py --test signon                # RID 13 sign-on protocol
-python3 probes/fwu_probe.py --test bladerunner           # BladeRunner protocol probe
-python3 probes/fwu_probe.py --test enumerate             # Enumerate all HID interfaces
-python3 probes/fwu_probe.py --test scan                  # Scan FWU command codes
-python3 probes/fwu_probe.py --test all                   # Progressive test suite
-python3 probes/dect_settings_probe.py --test read        # Read DECT settings nibbles
-python3 probes/dect_settings_probe.py --test scan_cmds   # Scan CVM command families
-```
-
-## Project Structure
-
-```
-polytool/
-│
-│── # ─── Core Server & CLI ───────────────────────────
-├── lensserver.py            # Drop-in LensService replacement (TCP + HTTP API)
-├── http_api.py              # REST API server (devices, settings, battery, native bridge)
-├── polytool.py              # CLI entry point (re-exports from devices/firmware/scanner)
-├── devices.py               # Device constants, maps, discovery, PolyDevice dataclass
-├── firmware.py              # Firmware parsing, cloud API, BladeRunner DFU, updater
-├── scanner.py               # CLI commands (scan, info, battery, updates, flash, catalog)
-├── menu.py                  # Interactive terminal menu
-├── lensapi.py               # LensServiceApi TCP client
-│
-│── # ─── Device Communication ────────────────────────
-├── native_bridge.py         # ctypes interface to Poly native DLLs (DECT/BT)
-├── native_bridge_worker.py  # 32-bit subprocess proxy for 64-bit Windows
-├── device_settings.py       # Direct HID settings read/write (CX2070x/BladeRunner)
-├── device_settings_db.py    # Canonical settings DB from DeviceSettings.zip (217 devices)
-├── lens_settings.py         # Settings profiles, API format, PREFER_OFFICIAL_SETTINGS
-├── device_identity.py       # Serial/calibration preservation during flash
-├── polybus.py               # Native PolyBus library interface (ctypes)
-│
-│── # ─── Firmware Flashing ───────────────────────────
-├── bw_flash.py              # Blackwire 3220/5xx flasher (CX2070x EEPROM)
-├── fwu_flash.py             # Savi DECT flasher (FWU API / CVM)
-│
-│── # ─── Web & Fleet Management ──────────────────────
-├── polylens.py              # Single-workstation web dashboard (Flask)
-├── polyserver.py            # Fleet management server (PostgreSQL)
-├── polyagent.py             # Fleet workstation agent
-├── polyremote.py            # Remote settings CLI with JSON presets
-├── clockwork_client.py      # Legacy compatibility wrapper for lensapi
-│
-│── # ─── Monitoring & Debug ──────────────────────────
-├── monitor_legacyhost.py    # Poly Lens log file monitor
-│
-│── # ─── Data ────────────────────────────────────────
-├── data/
-│   ├── DeviceSettings.zip       # Canonical per-device settings (from Poly Studio)
-│   ├── Devices.config           # Device PID → handler mappings
-│   ├── DeviceSetting.json       # Settings internal keys → display values
-│   └── settingsCategories.json  # Poly Studio renderer settings (146 entries)
-├── presets/                     # JSON settings presets for polyremote
-│   ├── office_standard.json
-│   ├── call_center.json
-│   └── quiet_mode.json
-│
-│── # ─── Web Frontends ───────────────────────────────
-├── web/                         # polylens.py dashboard
-├── web_admin/                   # polyserver.py admin dashboard
-│
-│── # ─── Research & Probes ───────────────────────────
-├── probes/
-│   ├── fwu_probe.py             # HID protocol probe
-│   ├── dect_settings_probe.py   # DECT settings write probe
-│   └── hid_helpers.py           # Shared HID utilities
-│
-│── # ─── Tests ────────────────────────────────────────
-├── tests/
-│   ├── test_devices.py          # Device ID, version normalization, DFU maps
-│   ├── test_settings.py         # Settings profiles, API format, value translation
-│   ├── test_protocol.py         # LensServiceApi protocol constants, handlers
-│   ├── test_device_settings_db.py  # Zip database loading, setting corrections
-│   └── test_http_api.py         # Integration tests against running server
-│
-│── # ─── Documentation ───────────────────────────────
-├── RE_FINDINGS.txt          # Reverse engineering findings
-├── CLAUDE.md                # Claude Code project context
-└── README.md
-```
-
-## Testing
-
-```bash
-# Run unit tests (no server needed)
-python3 -m unittest discover tests/ -v
-
-# Run integration tests (requires running lensserver with --http)
-python3 -m unittest tests.test_http_api -v
-
-# Run all tests
-python3 -m unittest discover tests/ -v
-```
-
-133 tests covering:
-- **Device identification** — version normalization, DFU executor mapping, codename lookups, PID maps
-- **Settings resolution** — family detection, per-PID profiles, API format with meta objects, value translation
-- **Protocol** — SOH delimiter, API version, all 19 LensServiceApi message handlers
-- **Settings database** — zip loading, setting name corrections, choice validation, hex normalization
-- **HTTP API** — all 10 endpoints against live devices (health, devices, settings, battery, DFU, native bridge, error handling)
-
-## Requirements
-
-- Python 3.9+
-- `hidapi` — HID device communication
-- `requests` — Poly Cloud API
-- `flask` — Web dashboard and fleet server
-- `pyusb` — USB reset for macOS (Savi flash)
-- `psycopg2-binary` — PostgreSQL (fleet server only)
-- `rich` — Terminal formatting (optional)
+Open-source replacement for the Poly Lens desktop app. CLI + drop-in
+`LensService` MITM + REST API for managing Poly/Plantronics USB headsets.
 
 ```bash
 pip install -r requirements.txt
+python3 polytool.py scan          # see what's connected
 ```
 
-## How It Works
+---
 
-PolyTool talks directly to headsets over USB HID using the same protocols Poly Lens uses internally. Firmware is downloaded from Poly's public CDN and flashed using reverse-engineered protocols from the Poly Lens .NET assemblies and native libraries.
+## Killer features
 
-The LensServer component speaks the same TCP protocol as the official Poly Lens Control Service (reverse-engineered from the Poly Studio Electron app's `app.asar`). Poly Studio GUI connects to our server and works exactly as if the official service were running.
+- **Fix the FFFFFFFF firmware-version bug.** Some Savi DECT headsets
+  ship with unprogrammed SetID NVRAM and Poly Studio chokes on it.
+  `polytool fix-setid` writes a valid SetID directly to NVRAM through
+  Poly's own LegacyDfu pipeline. Auto-isolates sibling devices when you
+  have multiple of the same model so the write actually lands on the
+  unit you specified instead of a random one.
+  ```bash
+  polytool fix-setid <serial>            # one device
+  polytool fix-setid all --yes           # every FFFF unit
+  ```
+- **Make Poly Studio show distinct names + accurate firmware versions.**
+  Stock Studio shows two Savi 7320s as identical "Poly Savi 7300 Office
+  Series" with blank firmware versions. Our `lensserver.py` MITMs the
+  Lens Control Service protocol, synthesizes the missing fields, and
+  pipes everything through. `polytool install-service` registers it as
+  an auto-start scheduled task.
+- **Drop-in firmware updater.** `polytool update-legacy` downloads from
+  Poly's CDN and runs the same LegacyDfu/LegacyHost pipeline Studio
+  uses — works while Studio is open.
+- **HTTP REST API** at `localhost:8080`. Curl-able fix-setid, settings
+  read/write, battery, DFU status, native-bridge state.
 
-The Native Bridge loads Poly's own `libNativeLoader.dylib` and `libPLTDeviceManager.dylib` via ctypes, calling `NativeLoader_SendToNative()` to write settings using the same JSON protocol the official legacyhost uses internally. This gives us full DECT and Bluetooth device support without running any Poly daemons.
+---
 
-Settings are dynamically profiled — when a device is discovered, we query what setting IDs it supports and build a profile that matches Poly Studio's renderer expectations. This means any Poly headset works automatically.
+## Quick reference
 
-See `RE_FINDINGS.txt` for the complete reverse engineering documentation — register maps, CVM commands, EEPROM layouts, DECT setting IDs (25 captured with values), LensServiceApi protocol details, and protocol specifics for every tested device.
+| Command | What it does |
+|---|---|
+| `polytool scan` | List connected devices + warn about FFFF state |
+| `polytool info <serial\|tattoo\|#>` | Full per-device details |
+| `polytool fix-setid <serial>` | Write SetID NVRAM (clears FFFFFFFF) |
+| `polytool update-legacy <serial>` | Real firmware update via LegacyDfu |
+| `polytool updates` | Check Poly cloud for available firmware |
+| `polytool install-service` | Auto-start lensserver MITM at logon |
+| `polytool service-{start,stop,status}` | Control the auto-start service |
+| `python3 lensserver.py` | Run the MITM in foreground (debugging) |
+
+```bash
+# Find a FFFF unit, fix it, verify
+polytool scan
+# > Warning: 1 device(s) with unprogrammed SetID NVRAM (FFFFs)
+polytool fix-setid 820F03A0D2CF42A7BE319796382C6EFB --yes
+polytool scan
+# > FFFF warning gone
+```
+
+---
+
+## HTTP API
+
+Lensserver exposes a REST API at `http://127.0.0.1:8080/api`:
+
+```bash
+curl http://127.0.0.1:8080/api/devices                      # list
+curl http://127.0.0.1:8080/api/devices/820F03A0             # one device
+curl http://127.0.0.1:8080/api/devices/820F03A0/settings    # settings
+curl http://127.0.0.1:8080/api/devices/820F03A0/battery     # battery
+curl http://127.0.0.1:8080/api/devices/820F03A0/dfu         # firmware status
+
+# Write a setting
+curl -X POST http://127.0.0.1:8080/api/devices/820F03A0/settings \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "audioSensing", "value": "true"}'
+
+# Fix the FFFF bug remotely
+curl -X POST http://127.0.0.1:8080/api/devices/820F03A0/fix-setid -d '{}'
+# Optional body fields: version (dotted str), isolate (bool), dryRun (bool)
+```
+
+See `http_api.py` for the full endpoint list (or hit `/api` for a JSON
+index of routes).
+
+---
+
+## Supported devices
+
+Anything with a Poly/Plantronics VID (`0x047F`, `0x05A7`, `0x03F0`).
+Detailed handlers exist for:
+
+- **Savi DECT** — 7310/7320/7410/7420, 8200/8210/8220/8410/8420
+  (full settings + firmware via `LegacyDfu`)
+- **Blackwire** — 3220, 3310/15/20/25, 5xx, 7225, 8225
+- **EncorePro** — 310/320/515/525/545
+- **Voyager** — 4320, Focus 2, Free 60, Surround 80/85
+- **Sync** — 20/40/60
+- **Studio** — video bars (firmware only)
+
+For unknown PIDs, polytool reads from a bundled `data/dfu_devices.json`
+extracted from Poly's own `dfu.config` (332 PIDs). Brand-new SKUs get
+a model name + DFU executor automatically — no code change needed.
+
+---
+
+## How it works
+
+- **`lensserver.py`** speaks the same TCP protocol as Poly's Lens
+  Control Service (SOH-delimited JSON over a localhost port advertised
+  via `%PROGRAMDATA%\Poly\Lens Control Service\SocketPortNumber`). Poly
+  Studio finds it transparently. Background watcher keeps the port file
+  claimed even when LCS rewrites it.
+- **`setid_fix.py`** forges a minimal `rules.json`-only DFU bundle with
+  a `setid` component and feeds it to Poly's `LegacyDfu.exe` via the
+  `\\.\pipe\LegacyHostDfuServer` named pipe. That triggers the in-DLL
+  SetID write path inside `DFUManager.dll` — same code path Poly uses
+  internally, just with our forged input.
+- **`device_isolate.py`** handles the multi-device-same-PID routing
+  bug in Poly's `SetID::get_device` (it picks by PID alone, not serial).
+  Stops LCS → disables sibling HID children via `Disable-PnpDevice` →
+  restarts LCS so only the target is visible → runs the DFU → reverses.
+  Auto-relaunches the Poly process watchdogs after so Studio still
+  works when the dance finishes.
+- **`devices.py`** + `data/dfu_devices.json` give every PID a canonical
+  model name + DFU handler list, sourced from Poly's own dfu.config.
+- **`native_bridge.py`** loads Poly's `PLTDeviceManager.dll` /
+  `NativeLoader.dll` via ctypes for live DECT/Voyager state. Spawns a
+  32-bit subprocess proxy when running on 64-bit Python.
+
+Full reverse-engineering notes in `RE_FINDINGS.txt`.
+
+---
+
+## Requirements
+
+Python 3.9+, plus:
+
+```
+hidapi requests rich
+```
+
+`pip install -r requirements.txt` covers everything. Admin privileges
+required for `fix-setid` on multi-device hosts (the auto-isolate uses
+PowerShell `Disable-PnpDevice`); falls back to a no-op-with-warning
+otherwise.
+
+Tested on Windows 11. macOS works for read-only operations and CLI
+commands; the MITM is Windows-only.
+
+---
 
 ## License
 
