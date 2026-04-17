@@ -48,6 +48,31 @@ def _log(msg, verbose_only=False):
     if verbose_only and not _verbose:
         return
     print(msg)
+
+
+def _sanitize_firmware_components(fw):
+    """Strip 0xFFFF placeholder values from firmware component dicts.
+
+    DECT bases sometimes report SetID (or other sub-component) fields as all
+    FFFFs when the underlying NVRAM record was never programmed. Poly Studio
+    treats those values as real and chokes on version comparisons, so drop
+    any nested block whose every field is "ffff" (case-insensitive).
+    """
+    if not isinstance(fw, dict):
+        return fw
+    cleaned = {}
+    for k, v in fw.items():
+        if isinstance(v, dict):
+            if v and all(isinstance(x, str) and x.lower() == "ffff" for x in v.values()):
+                continue  # drop fully-FF sub-block (e.g. setId)
+            cleaned[k] = v
+        elif isinstance(v, str) and v.lower() in ("ffff", "ffffffff"):
+            continue  # drop scalar FF placeholder
+        else:
+            cleaned[k] = v
+    return cleaned
+
+
 MSG_DELIM = "\x01"  # SOH byte — real LensService message separator (NOT newline)
 
 # Port file location (platform-specific)
@@ -233,7 +258,7 @@ class LensServer:
                         try:
                             msg = json.loads(line)
                             msg_type = msg.get("type", "?")
-                            _log(f"  ← {msg_type}: {json.dumps(msg)[:150]}", verbose_only=True)
+                            _log(f"  <- {msg_type}: {json.dumps(msg)[:150]}", verbose_only=True)
                             if self.dump_mode and self.dump_file:
                                 self.dump_file.write(json.dumps({"dir": "IN", "msg": msg}) + "\n")
                                 self.dump_file.flush()
@@ -326,7 +351,7 @@ class LensServer:
         if handler:
             result = handler(msg, client_sock)
             if result:
-                _log(f"  → {result.get('type', '?')}", verbose_only=True)
+                _log(f"  -> {result.get('type', '?')}", verbose_only=True)
             return result
 
         # Catch-all — respond to any unknown message with an empty ack
@@ -366,7 +391,7 @@ class LensServer:
                 "apiVersion": API_VERSION,
                 "device": clean_dev,
             })
-            _log(f"  → DeviceAttached: {dev.get('productName', '?')}", verbose_only=True)
+            _log(f"  -> DeviceAttached: {dev.get('productName', '?')}", verbose_only=True)
 
             # Push battery info if available
             self._push_battery(client_sock, did)
@@ -415,7 +440,7 @@ class LensServer:
                 ],
             },
         })
-        _log(f"  → Battery: {level_pct}%{' (charging)' if charging else ''}", verbose_only=True)
+        _log(f"  -> Battery: {level_pct}%{' (charging)' if charging else ''}", verbose_only=True)
 
     def on_get_device_list(self, msg, client_sock):
         """Handle GetDeviceList."""
@@ -443,7 +468,7 @@ class LensServer:
                 "deviceId": device_id,
                 "settings": metadata,
             })
-            _log(f"  → DeviceSettingsMetadata: {len(metadata)} settings", verbose_only=True)
+            _log(f"  -> DeviceSettingsMetadata: {len(metadata)} settings", verbose_only=True)
 
         # Then send settings values
         self.send_msg(client_sock, {
@@ -1006,7 +1031,7 @@ class LensServer:
             # Generate a stable device ID from native ID
             device_id = f"{int(nid) & 0xFFFFFFFF:08X}"
 
-            fw = ndev.get("firmwareVersion", {})
+            fw = _sanitize_firmware_components(ndev.get("firmwareVersion", {}))
             fw_display = fw.get("bluetooth", "") or fw.get("usb", "") or fw.get("headset", "")
 
             # Find serial
