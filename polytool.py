@@ -62,7 +62,7 @@ from scanner import (
     _select_devices,
 )
 
-from setid_fix import cmd_fix_setid, DEFAULT_SETID
+from setid_fix import cmd_fix_setid, cmd_update_legacy, DEFAULT_SETID
 
 
 # ── Main Entry Point ─────────────────────────────────────────────────────────
@@ -134,6 +134,19 @@ def main():
     setid_parser.add_argument("--verbose", action="store_true",
                               help="Print full LegacyDfu output on failure")
 
+    # update-legacy
+    upl_parser = subparsers.add_parser(
+        "update-legacy",
+        help="Install a real cloud firmware bundle via Poly's LegacyDfu pipeline "
+             "(handles multi-component, smart-skip; required for Savi DECT)",
+    )
+    upl_parser.add_argument("device", nargs="?", default="all",
+                            help="Device # / serial / pid / 'all'")
+    upl_parser.add_argument("--yes", "-y", action="store_true",
+                            help="Skip confirmation prompts")
+    upl_parser.add_argument("--verbose", action="store_true",
+                            help="Print full LegacyDfu output on failure")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -153,6 +166,7 @@ def main():
         "catalog": cmd_catalog,
         "fwinfo": cmd_fwinfo,
         "fix-setid": cmd_fix_setid,
+        "update-legacy": cmd_update_legacy,
     }
 
     cmd_func = commands.get(args.command)

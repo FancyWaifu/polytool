@@ -43,7 +43,41 @@ def cmd_scan(args):
     out.header("PolyTool - Device Scanner")
     devices = discover_devices()
     out.device_table(devices)
+    _warn_on_ff_setid(devices)
     return devices
+
+
+def _warn_on_ff_setid(devices):
+    """Cross-check discovered devices against LCS's cache for FFFF SetID problem.
+
+    LCS keeps device_PLT_<serial> JSON files updated with each device attach.
+    If FirmwareVersion or setid in any of those files reads as FFs, the
+    headset's NVRAM SetID region is unprogrammed — flag it and suggest a fix.
+    """
+    try:
+        from setid_fix import read_lcs_device_cache, diagnose_setid
+    except Exception:
+        return  # not on Windows or import failed; silently skip
+    cache = read_lcs_device_cache()
+    if not cache:
+        return  # Poly Lens not installed or no cache yet
+    issues = []
+    for dev in devices:
+        if not dev.serial:
+            continue
+        d = diagnose_setid(dev.serial, cache=cache)
+        if d["state"] == "ff":
+            issues.append((dev, d))
+    if not issues:
+        return
+    out.print("")
+    out.warn(f"  {len(issues)} device(s) with unprogrammed SetID NVRAM (FFFFs):")
+    for dev, d in issues:
+        name = dev.friendly_name or dev.product_name or "device"
+        out.print(f"    - {name} ({dev.vid_hex}:{dev.pid_hex})  "
+                  f"FirmwareVersion={d['firmware_version']!r}")
+    out.print("    Fix:  polytool fix-setid       (fast, ~10 sec)")
+    out.print("          polytool update-legacy   (full firmware update, ~10 min, also fixes it)")
 
 
 def cmd_info(args):

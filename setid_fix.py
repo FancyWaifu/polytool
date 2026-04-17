@@ -44,6 +44,8 @@ import zipfile
 from pathlib import Path
 
 
+LCS_DEVICE_CACHE_DIR = r"C:\ProgramData\Poly\Lens Control Service"
+
 LEGACY_DFU_PATHS = [
     r"C:\Program Files\Poly\Lens Control Service\eDfu\LegacyDfu.exe",
     r"C:\Program Files (x86)\Poly\Lens Control Service\eDfu\LegacyDfu.exe",
@@ -71,6 +73,64 @@ def is_ff_setid(setid):
     if isinstance(setid, str):
         return bool(re.fullmatch(r"(?:ffff[.-]?){3,4}f*", setid.lower()))
     return False
+
+
+def read_lcs_device_cache():
+    """Read LCS's device_PLT_* cache files. Returns serial → cache dict.
+
+    These files are kept up-to-date by the official Poly Lens Control Service
+    when devices attach. They contain the FirmwareVersion LCS would display
+    and the parsed FirmwareComponents block. Useful for fast SetID-state
+    inspection without having to spin up the native bridge.
+
+    Returns {} if the cache directory doesn't exist (Poly Lens not installed).
+    """
+    cache_dir = Path(LCS_DEVICE_CACHE_DIR)
+    if not cache_dir.exists():
+        return {}
+    out = {}
+    for f in cache_dir.glob("device_PLT_*"):
+        try:
+            data = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        serial = data.get("SerialNumber", "")
+        if serial:
+            out[serial] = data
+    return out
+
+
+def diagnose_setid(serial, cache=None):
+    """Look up a device's SetID state in LCS's cache.
+
+    Returns dict with keys:
+      state: 'ff' | 'real' | 'absent' | 'unknown'
+      firmware_version: the displayed version string
+      setid: the raw setid string from FirmwareComponents
+      hint: short suggestion for the user, or empty string
+    """
+    if cache is None:
+        cache = read_lcs_device_cache()
+    rec = cache.get(serial)
+    if not rec:
+        return {"state": "unknown", "firmware_version": "", "setid": "", "hint": ""}
+    fc = rec.get("FirmwareComponents", {})
+    setid = fc.get("setid", "") or ""
+    fw = rec.get("FirmwareVersion", "") or ""
+    if is_ff_setid(setid) or is_ff_setid(fw):
+        return {
+            "state": "ff",
+            "firmware_version": fw,
+            "setid": setid,
+            "hint": "unprogrammed SetID NVRAM — run `polytool fix-setid` (fast) "
+                    "or `polytool update-legacy` (full firmware update, also clears the bug)",
+        }
+    return {
+        "state": "real" if setid else "absent",
+        "firmware_version": fw,
+        "setid": setid,
+        "hint": "",
+    }
 
 
 def parse_setid_string(s):
@@ -340,11 +400,106 @@ def cmd_fix_setid(args):
                 out.print(result["output"])
 
 
+# ── Full bundle install (real firmware update via LegacyDfu) ────────────────
+
+def install_bundle(zip_path, vid, pid, serial, timeout=900, log=print):
+    """Install a real firmware bundle .zip via LegacyDfu + LegacyHost.
+
+    Same plumbing as fix_setid() but with a real cloud bundle (not forged).
+    LegacyDfu handles smart-skip per component, so a 67MB bundle where most
+    components are already current finishes in a few minutes.
+
+    Returns dict with 'success' bool, 'message' str, and 'output' str.
+    """
+    zip_path = Path(zip_path)
+    if not zip_path.exists():
+        return {"success": False, "message": f"bundle not found: {zip_path}"}
+
+    if not ensure_legacy_host_running():
+        return {"success": False,
+                "message": "LegacyHost.exe could not start or DFU pipe never appeared"}
+    log("LegacyHost DFU pipe is up")
+
+    log(f"Installing bundle: {zip_path.name}")
+    log(f"  VID=0x{vid:04X} PID=0x{pid:04X} serial={serial}")
+    log("  This may take several minutes — do not unplug the device.")
+    ok, output = run_legacy_dfu(zip_path, vid, pid, serial, timeout=timeout)
+
+    if ok:
+        return {"success": True,
+                "message": "Bundle install completed successfully.",
+                "output": output}
+    return {"success": False,
+            "message": "LegacyDfu did not report 'DFU Complete: 100' — see output",
+            "output": output}
+
+
+def cmd_update_legacy(args):
+    """`polytool update-legacy` entry point: download cloud bundle and install."""
+    from devices import discover_devices, try_read_device_info, out, PolyDevice
+    from firmware import PolyCloudAPI
+
+    raw = discover_devices()
+    for d in raw:
+        try_read_device_info(d)
+
+    if args.device == "all":
+        targets = raw
+    else:
+        sel = args.device.lower()
+        targets = [d for d in raw if sel in d.serial.lower()
+                   or sel in (d.product_name or "").lower()
+                   or sel == f"{d.pid:04x}"]
+    if not targets:
+        out.error("No matching devices found.")
+        return
+
+    cloud = PolyCloudAPI()
+    for dev in targets:
+        out.print(f"\n{dev.product_name or 'Device'} ({dev.vid_hex}:{dev.pid_hex}) "
+                   f"serial={dev.serial}")
+        info = cloud.check_firmware(dev)
+        if not info or not info.get("download_url"):
+            out.warn("  No firmware available from Poly Cloud — skipping")
+            continue
+        url = info["download_url"]
+        latest = info.get("latest", "?")
+        out.print(f"  Cloud bundle: v{latest}")
+        out.print(f"  URL: {url[:100]}...")
+
+        if not args.yes:
+            ans = input(f"    Download and install on this device? [y/N] ").strip().lower()
+            if ans != "y":
+                out.print("    skipped")
+                continue
+
+        path = cloud.download_firmware(url)
+        if not path:
+            out.error("  Download failed")
+            continue
+        out.print(f"  Bundle path: {path}")
+
+        result = install_bundle(
+            zip_path=path,
+            vid=dev.vid,
+            pid=dev.pid,
+            serial=dev.serial,
+            log=lambda s: out.print(f"  {s}"),
+        )
+        if result["success"]:
+            out.print(f"  OK: {result['message']}")
+        else:
+            out.error(f"  FAILED: {result['message']}")
+            if args.verbose and result.get("output"):
+                out.print(result["output"])
+
+
 __all__ = [
     "is_ff_setid", "parse_setid_string",
+    "read_lcs_device_cache", "diagnose_setid",
     "find_legacy_dfu", "find_legacy_host", "is_dfu_pipe_up",
     "ensure_legacy_host_running",
-    "build_setid_bundle", "run_legacy_dfu",
-    "fix_setid", "cmd_fix_setid",
+    "build_setid_bundle", "run_legacy_dfu", "install_bundle",
+    "fix_setid", "cmd_fix_setid", "cmd_update_legacy",
     "DEFAULT_SETID",
 ]
