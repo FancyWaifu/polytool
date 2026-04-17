@@ -223,6 +223,9 @@ class LensServer:
                     clean_dev = {k: v for k, v in dev.items() if not k.startswith("_")}
                     _log(f"  ++ Device added: {dev.get('productName', '?')}")
                     self._maybe_warn_ff_setid(dev)
+                    # Async cloud check so the cache is warm by the time
+                    # Poly Studio queries GetDeviceDFUStatus moments later.
+                    self._prewarm_dfu_cache(did)
                     self.broadcast({
                         "type": "DeviceAttached",
                         "apiVersion": API_VERSION,
@@ -647,47 +650,41 @@ class LensServer:
     _dfu_cache = {}
 
     def on_get_dfu_status(self, msg, client_sock):
-        """Handle GetDeviceDFUStatus — check Poly Cloud for firmware updates."""
+        """Handle GetDeviceDFUStatus - check Poly Cloud for firmware updates.
+
+        Returns the real cloud answer synchronously the first time, then
+        caches it. Earlier this method returned an 'Equal' placeholder and
+        broadcast the real result later, but Poly Studio doesn't always
+        re-render its UI when the followup arrives - the 'Update Available'
+        button stays hidden because Studio decided 'no update' on the
+        first response. The cloud query is ~200ms so blocking is fine.
+        """
         device_id = msg.get("deviceId", "")
-        with self._lock:
-            dev = self.devices.get(device_id, {})
-
-        # Return cached result if available
-        if device_id in self._dfu_cache:
-            cached = self._dfu_cache[device_id]
-            return {
-                "type": "DeviceDFUStatus",
-                "apiVersion": API_VERSION,
-                "deviceId": device_id,
-                **cached,
-            }
-
-        # Check cloud in background to avoid blocking
-        import threading
-        def _check():
-            result = self._check_firmware_update(device_id)
-            self._dfu_cache[device_id] = result
-            # Push the status to all connected clients
-            self.broadcast({
-                "type": "DeviceDFUStatus",
-                "apiVersion": API_VERSION,
-                "deviceId": device_id,
-                **result,
-            })
-            status_str = ", ".join(result.get("statuses", []))
+        if device_id not in self._dfu_cache:
+            self._dfu_cache[device_id] = self._check_firmware_update(device_id)
+            status_str = ", ".join(self._dfu_cache[device_id].get("statuses", []))
             _log(f"  Firmware check {device_id}: {status_str}", verbose_only=True)
-
-        threading.Thread(target=_check, daemon=True).start()
-
-        # Return current version while checking
+        cached = self._dfu_cache[device_id]
         return {
             "type": "DeviceDFUStatus",
             "apiVersion": API_VERSION,
             "deviceId": device_id,
-            "version": "",
-            "statuses": ["AvailableFirmwareVersionEqual"],
-            "releaseNoteUrl": "",
+            **cached,
         }
+
+    def _prewarm_dfu_cache(self, device_id):
+        """Populate the DFU cache for a freshly-attached device so Poly
+        Studio's first GetDeviceDFUStatus call returns instantly. Done in
+        a background thread because the cloud query takes ~200ms and we
+        don't want to delay the DeviceAttached broadcast."""
+        import threading
+        def _go():
+            try:
+                if device_id not in self._dfu_cache:
+                    self._dfu_cache[device_id] = self._check_firmware_update(device_id)
+            except Exception:
+                pass
+        threading.Thread(target=_go, daemon=True).start()
 
     def _check_firmware_update(self, device_id):
         """Check Poly Cloud for available firmware update."""
@@ -1186,6 +1183,13 @@ class LensServer:
 
                 # Populate settings cache from real HID reads
                 self._populate_settings_cache(device_id, dev)
+
+                # Pre-warm the cloud DFU check so Studio's first
+                # GetDeviceDFUStatus query returns the real answer instead of
+                # a stale Equal placeholder. Devices added by the periodic
+                # _device_scanner already get this through its own pre-warm
+                # call; this covers the very-first discovery at startup.
+                self._prewarm_dfu_cache(device_id)
 
             # Remove USB devices no longer present (preserve native bridge devices)
             with self._lock:
