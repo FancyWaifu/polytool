@@ -22,6 +22,9 @@ python3 polytool.py scan          # see what's connected
   polytool fix-setid <serial>            # one device
   polytool fix-setid all --yes           # every FFFF unit
   ```
+  📖 **See [FIXING-FFFF.md](FIXING-FFFF.md)** for the full guide:
+  symptoms, prerequisites, troubleshooting, the HTTP API recipe, and a
+  technical writeup of how the fix actually works.
 - **Make Poly Studio show distinct names + accurate firmware versions.**
   Stock Studio shows two Savi 7320s as identical "Poly Savi 7300 Office
   Series" with blank firmware versions. Our `lensserver.py` MITMs the
