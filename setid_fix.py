@@ -114,34 +114,22 @@ def is_dfu_pipe_up():
     """Check whether \\\\.\\pipe\\LegacyHostDfuServer exists.
 
     LegacyHost only creates this pipe while running. LegacyDfu requires it.
+    Uses WaitNamedPipeW: returns nonzero if a pipe instance is available;
+    GetLastError gives ERROR_FILE_NOT_FOUND (2) when the pipe doesn't exist
+    at all, vs ERROR_SEM_TIMEOUT (121) when it exists but no free instance.
+    Either of "available" or "exists-but-busy" means LegacyHost is up.
     """
     try:
-        # Opening a pipe handle for read confirms existence without blocking.
-        # WaitNamedPipeW with 0 timeout returns immediately.
         import ctypes
-        ctypes.windll.kernel32.WaitNamedPipeW(DFU_PIPE_NAME, 0)
-        # Even on failure (timeout/no instance), the pipe existing is what
-        # we care about. Use FindFirstFile pattern instead for reliability.
-        from ctypes import wintypes
-
-        class WFD(ctypes.Structure):
-            _fields_ = [
-                ("dwFileAttributes", wintypes.DWORD), ("ftCreationTime", wintypes.FILETIME),
-                ("ftLastAccessTime", wintypes.FILETIME), ("ftLastWriteTime", wintypes.FILETIME),
-                ("nFileSizeHigh", wintypes.DWORD), ("nFileSizeLow", wintypes.DWORD),
-                ("dwReserved0", wintypes.DWORD), ("dwReserved1", wintypes.DWORD),
-                ("cFileName", wintypes.WCHAR * 260), ("cAlternateFileName", wintypes.WCHAR * 14),
-            ]
         k = ctypes.WinDLL("kernel32", use_last_error=True)
-        k.FindFirstFileW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(WFD)]
-        k.FindFirstFileW.restype = wintypes.HANDLE
-        d = WFD()
-        h = k.FindFirstFileW(r"\\.\pipe\LegacyHostDfuServer", ctypes.byref(d))
-        invalid = ctypes.c_void_p(-1).value
-        if h != invalid:
-            k.FindClose(h)
-            return True
-        return False
+        k.SetLastError(0)
+        result = k.WaitNamedPipeW(DFU_PIPE_NAME, 0)
+        if result:
+            return True  # pipe ready
+        err = ctypes.get_last_error()
+        # ERROR_SEM_TIMEOUT (121) means pipe exists but all instances busy
+        # ERROR_PIPE_BUSY (231) likewise — pipe exists, just no free slot
+        return err in (121, 231)
     except Exception:
         return False
 
