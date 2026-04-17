@@ -138,6 +138,11 @@ def main():
                               help="Skip confirmation prompts")
     setid_parser.add_argument("--verbose", action="store_true",
                               help="Print full LegacyDfu output on failure")
+    setid_parser.add_argument("--no-isolate", dest="isolate",
+                              action="store_false", default=True,
+                              help="Skip auto-isolation of sibling same-VID:PID "
+                                   "devices (faster but unsafe when multiple "
+                                   "DECT bases of the same model are connected)")
 
     # update-legacy
     upl_parser = subparsers.add_parser(

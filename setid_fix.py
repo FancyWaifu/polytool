@@ -282,7 +282,7 @@ def run_legacy_dfu(zip_path, vid, pid, serial, timeout=120):
 # ── High-level workflow ─────────────────────────────────────────────────────
 
 def fix_setid(serial, vid=0x047F, pid=None, pid_hex=None, version=None,
-              dry_run=False, log=print):
+              dry_run=False, isolate_siblings=True, log=print):
     """Write a fresh SetID to a Poly device's NVRAM.
 
     serial   — full device serial (32-char hex like "049160FE6715450F8A4FB...")
@@ -320,15 +320,27 @@ def fix_setid(serial, vid=0x047F, pid=None, pid_hex=None, version=None,
         return {"success": True, "message": f"dry-run — bundle at {bundle_path}",
                 "bundle_path": str(bundle_path)}
 
-    # Make sure LegacyHost is up so the DFU pipe exists
-    if not ensure_legacy_host_running():
-        return {"success": False,
-                "message": "LegacyHost.exe could not start or DFU pipe never appeared"}
-    log("  LegacyHost DFU pipe is up")
+    # Run LegacyDfu — wrap in device isolation so DFUManager.dll's
+    # SetID::get_device (which routes by PID alone, not by serial) can't
+    # land on a sibling device that would silently no-op the write.
+    # Note: ensure_legacy_host_running() runs INSIDE the isolate block
+    # because isolate stops LCS (which kills LegacyHost) — we need a
+    # fresh LegacyHost spawned after siblings are disabled.
+    if isolate_siblings:
+        from device_isolate import isolate as _isolate
+        ctx = _isolate(serial, vid, pid, log=log)
+    else:
+        import contextlib as _cl
+        ctx = _cl.nullcontext()
 
-    # Run LegacyDfu
-    log("  Running LegacyDfu.exe (this triggers the actual NVRAM write)...")
-    ok, output = run_legacy_dfu(bundle_path, vid, pid, serial)
+    with ctx:
+        if not ensure_legacy_host_running():
+            return {"success": False,
+                    "message": "LegacyHost.exe could not start or DFU pipe never appeared"}
+        log("  LegacyHost DFU pipe is up")
+
+        log("  Running LegacyDfu.exe (this triggers the actual NVRAM write)...")
+        ok, output = run_legacy_dfu(bundle_path, vid, pid, serial)
 
     # Try to clean up the temp file
     try:
@@ -390,6 +402,7 @@ def cmd_fix_setid(args):
             pid=dev.pid,
             version=args.version,
             dry_run=args.dry_run,
+            isolate_siblings=getattr(args, "isolate", True),
             log=lambda s: out.print(f"  {s}"),
         )
         if result["success"]:
