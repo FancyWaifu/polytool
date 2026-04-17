@@ -722,17 +722,57 @@ class LensServer:
         }
 
     def _prewarm_dfu_cache(self, device_id):
-        """Populate the DFU cache for a freshly-attached device so Poly
-        Studio's first GetDeviceDFUStatus call returns instantly. Done in
-        a background thread because the cloud query takes ~200ms and we
-        don't want to delay the DeviceAttached broadcast."""
+        """Populate the DFU cache for a freshly-attached device AND push
+        the result to all connected clients.
+
+        Poly Studio doesn't poll GetDeviceDFUStatus — it relies on LCS
+        to proactively notify it via DeviceDFUStatus events whenever
+        firmware-update availability changes. So we have to broadcast
+        the status, not just cache it. Done in a background thread
+        because the cloud query takes ~200ms and we don't want to delay
+        the DeviceAttached broadcast.
+
+        Also broadcasts AvailableSoftwareUpdate (the message type Studio
+        uses to render the per-device Update Available button) since
+        different Studio versions key off different message names.
+        """
         import threading
         def _go():
             try:
                 if device_id not in self._dfu_cache:
                     self._dfu_cache[device_id] = self._check_firmware_update(device_id)
-            except Exception:
-                pass
+                cached = self._dfu_cache[device_id]
+                with self._lock:
+                    dev = self.devices.get(device_id, {})
+                current = dev.get("firmwareVersion", "")
+                latest = cached.get("version", "")
+                statuses = cached.get("statuses", [])
+
+                self.broadcast({
+                    "type": "DeviceDFUStatus",
+                    "apiVersion": API_VERSION,
+                    "deviceId": device_id,
+                    "version": latest,
+                    "statuses": statuses,
+                    "releaseNoteUrl": cached.get("releaseNoteUrl", ""),
+                })
+                self.broadcast({
+                    "type": "AvailableSoftwareUpdate",
+                    "apiVersion": API_VERSION,
+                    "deviceId": device_id,
+                    "availableVersion": latest,
+                    "currentVersion": current,
+                    "statuses": statuses,
+                    "canPostpone": True,
+                    "component": "firmware",
+                    "releaseNoteUrl": cached.get("releaseNoteUrl", ""),
+                })
+                _log(f"  Pushed update status for {device_id}: "
+                     f"{', '.join(statuses) if statuses else 'no updates'}",
+                     verbose_only=True)
+            except Exception as e:
+                _log(f"  prewarm_dfu_cache failed for {device_id}: {e}",
+                     verbose_only=True)
         threading.Thread(target=_go, daemon=True).start()
 
     def _check_firmware_update(self, device_id):
