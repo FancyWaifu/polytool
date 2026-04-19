@@ -480,7 +480,20 @@ class Output:
     """Abstraction for rich/plain console output."""
 
     def __init__(self):
-        self.console = Console() if HAS_RICH else None
+        # force_terminal + UTF-8 stdout so the card-style scan renders
+        # correctly under cp1252 Windows consoles (default Console() picks
+        # up cp1252, which then crashes on the box-drawing/glyphs rich
+        # uses for panel borders).
+        if HAS_RICH:
+            try:
+                if sys.platform == "win32":
+                    sys.stdout.reconfigure(encoding="utf-8")
+                    sys.stderr.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
+            self.console = Console()
+        else:
+            self.console = None
 
     def print(self, *args, **kwargs):
         if self.console:
@@ -515,60 +528,111 @@ class Output:
             print(f"{'='*60}")
 
     def device_table(self, devices: list, title: str = "Connected Poly Devices"):
+        """Render every connected device as a Poly-Studio-style card.
+
+        The historical name 'device_table' stays for backward-compat, but
+        the layout is now card-per-device, mirroring Studio's device list:
+
+           ╭ Poly Savi 7320 (S/N2UGHYA) ─────╮
+           │  ● Connected                     │
+           │                                  │
+           │    🔋 Battery     100%           │
+           │    📦 Firmware    10.82          │
+           │                                  │
+           │  serial    377CF5FD...           │
+           │  VID:PID   047F:AC28             │
+           ╰──────────────────────────────────╯
+
+        Pass `--table` on the CLI for the older compact tabular view.
+        """
         if not devices:
             self.warn("No Poly devices found.")
             return
 
         if self.console:
-            # Mirror Poly Studio's card layout: name first, then battery,
-            # then firmware. Battery before FW makes the at-a-glance scan
-            # match Studio's UI hierarchy (status badge -> name -> battery
-            # gauge -> version line).
-            table = Table(title=title, box=box.ROUNDED, show_lines=False)
-            table.add_column("#", style="dim", width=2, no_wrap=True)
-            table.add_column("Device", style="bold white", no_wrap=True, max_width=44)
-            table.add_column("Battery", style="yellow", no_wrap=True)
-            table.add_column("Firmware", style="green", no_wrap=True, max_width=40)
-            table.add_column("VID:PID", style="dim", no_wrap=True)
-            table.add_column("Category", style="magenta", no_wrap=True)
-
-            for i, dev in enumerate(devices, 1):
-                name = dev.display_name
-                bat = dev.battery_display
-                if dev.battery_level >= 0:
-                    if dev.battery_level > 50:
-                        bat = f"[green]{bat}[/]"
-                    elif dev.battery_level > 20:
-                        bat = f"[yellow]{bat}[/]"
-                    else:
-                        bat = f"[red]{bat}[/]"
-                fw = dev.firmware_components_display or dev.firmware_display
-                table.add_row(
-                    str(i),
-                    name,
-                    bat,
-                    fw,
-                    f"{dev.vid:04X}:{dev.pid:04X}",
-                    dev.category,
-                )
-            self.console.print(table)
+            self._device_cards(devices, title)
         else:
-            print(f"\n{title}")
-            print("-" * 130)
-            fmt = "{:<3} {:<44} {:<16} {:<13} {:<40} {:<11}"
-            print(fmt.format("#", "Device", "Serial", "Battery", "FW", "VID:PID"))
-            print("-" * 130)
-            for i, dev in enumerate(devices, 1):
-                name = dev.display_name
-                fw = dev.firmware_components_display or dev.firmware_display
-                print(fmt.format(
-                    i,
-                    name[:44],
-                    (dev.serial or "n/a")[:16],
-                    dev.battery_display[:13],
-                    fw[:40],
-                    f"{dev.vid:04X}:{dev.pid:04X}",
-                ))
+            self._device_table_plain(devices, title)
+
+    def _device_cards(self, devices, title):
+        """Rich card-per-device renderer."""
+        from rich.table import Table as _T
+        from rich.panel import Panel as _P
+        from rich.text import Text as _Text
+        from rich import box as _box
+
+        self.console.print(f"\n[bold cyan]{title}[/]  ({len(devices)} device{'s' if len(devices) != 1 else ''})\n")
+
+        for dev in devices:
+            # Status pill - ASCII-safe (Windows cp1252 console can't render
+            # the typical ● glyph and rich crashes on it)
+            status = "[bold green]* Connected[/]"
+
+            # Battery cell: bar + number
+            bat_pct = dev.battery_level if dev.battery_level >= 0 else None
+            if bat_pct is None:
+                bat_str = "[dim]n/a[/]"
+            else:
+                if bat_pct > 50:
+                    color = "green"
+                elif bat_pct > 20:
+                    color = "yellow"
+                else:
+                    color = "red"
+                filled = bat_pct // 10
+                empty = 10 - filled
+                bat_str = (f"[{color}]{'#' * filled}[/][dim]{'-' * empty}[/]  "
+                           f"[bold {color}]{bat_pct}%[/]")
+                if dev.battery_charging:
+                    bat_str += "  [yellow](charging)[/]"
+
+            # Firmware cell: top-level + per-component
+            fw_str = f"[bold green]{dev.firmware_display}[/]"
+            if dev.firmware_components_display:
+                fw_str += f"  [dim]({dev.firmware_components_display})[/]"
+
+            # Body uses a tiny inner table for two-column "label / value"
+            body = _T.grid(padding=(0, 2))
+            body.add_column(style="dim", justify="right", width=10)
+            body.add_column(no_wrap=False)
+            body.add_row("Status", status)
+            body.add_row("", "")
+            body.add_row("Battery", bat_str)
+            body.add_row("Firmware", fw_str)
+            body.add_row("", "")
+            body.add_row("Serial", dev.serial[:16] + "..." if len(dev.serial or "") > 16 else dev.serial)
+            if dev.tattoo_serial:
+                body.add_row("Tattoo", dev.tattoo_serial)
+            body.add_row("VID:PID", f"{dev.vid:04X}:{dev.pid:04X}")
+            body.add_row("Category", dev.category)
+
+            self.console.print(_P(
+                body,
+                title=f"[bold white]{dev.display_name}[/]",
+                title_align="left",
+                border_style="cyan",
+                box=_box.ROUNDED,
+                expand=False,
+                padding=(0, 1),
+            ))
+
+    def _device_table_plain(self, devices, title):
+        """Old compact ASCII-table renderer for plain stdout / --table."""
+        print(f"\n{title}")
+        print("-" * 130)
+        fmt = "{:<3} {:<44} {:<16} {:<13} {:<40} {:<11}"
+        print(fmt.format("#", "Device", "Serial", "Battery", "FW", "VID:PID"))
+        print("-" * 130)
+        for i, dev in enumerate(devices, 1):
+            name = dev.display_name
+            fw = dev.firmware_components_display or dev.firmware_display
+            print(fmt.format(
+                i, name[:44],
+                (dev.serial or "n/a")[:16],
+                dev.battery_display[:13],
+                fw[:40],
+                f"{dev.vid:04X}:{dev.pid:04X}",
+            ))
 
 
 out = Output()
