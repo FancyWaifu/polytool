@@ -562,23 +562,43 @@ class LensServer:
         if not batt:
             return False
 
-        raw_level = batt.get("level", -1)
-        # Native bridge reports level on a 0-5 scale for some devices and
-        # 0-100 for others. Normalize to percentage.
-        if 0 <= raw_level <= 5:
-            pct = raw_level * 20
-        elif raw_level > 5:
-            pct = min(100, raw_level)
-        else:
-            pct = -1
-
+        # Forward the native-bridge battery dict verbatim - same wire
+        # format real LCS uses, which is what current Studio expects.
+        # Fields we've observed real LCS populate (from LegacyHostApp.log):
+        #   chargeLevel       0-5 scale on DECT (NOT a percentage!)
+        #   level             often equal to chargeLevel - 1
+        #   isChargeLevelValid bool flag - false suppresses the icon entirely
+        #   charging          bool
+        #   docked            bool
+        #   realLevel         raw battery counts when device exposes them
+        #   realMaxLevel      max raw count for the percentage calc
+        #
+        # Important: we used to coerce chargeLevel to a percentage (level*20),
+        # which made Studio render NOTHING because Studio expects the 0-5
+        # raw scale and computes its own display from there. Pass through
+        # the native values unchanged.
+        def _clean(v):
+            return v if v is not None else -1
         new_battery = {
-            "chargeLevel": pct,
+            "chargeLevel": _clean(batt.get("chargeLevel", batt.get("level", -1))),
+            "level": _clean(batt.get("level", -1)),
             "charging": bool(batt.get("charging", False)),
             "docked": bool(batt.get("docked", False)),
-            "isChargeLevelValid": pct >= 0,
-            "level": raw_level,
+            "isChargeLevelValid": bool(batt.get("isChargeLevelValid",
+                                                batt.get("level", -1) >= 0)),
+            "realLevel": _clean(batt.get("realLevel", -1)),
+            "realMaxLevel": _clean(batt.get("realMaxLevel", -1)),
         }
+        # Synthesize a percentage too, in case some Studio path reads it.
+        # Use chargeLevel (0-5 scale) -> percentage. Falls back to a
+        # straight pass-through for devices that already report percentage.
+        cl = new_battery["chargeLevel"]
+        if 0 <= cl <= 5:
+            new_battery["chargeLevelPercentage"] = cl * 20
+        elif cl > 5:
+            new_battery["chargeLevelPercentage"] = min(100, cl)
+        else:
+            new_battery["chargeLevelPercentage"] = -1
 
         with self._lock:
             old = dev.get("battery", {}) or {}
@@ -594,7 +614,8 @@ class LensServer:
                 "apiVersion": API_VERSION,
                 "device": clean_dev,
             })
-            _log(f"  Battery {device_id}: {pct}% "
+            _log(f"  Battery {device_id}: chargeLevel={new_battery['chargeLevel']} "
+                 f"({new_battery.get('chargeLevelPercentage', '?')}%) "
                  f"charging={new_battery['charging']} "
                  f"docked={new_battery['docked']}", verbose_only=True)
         return True
@@ -1469,16 +1490,18 @@ class LensServer:
                     "isInCall": False,
                     # Battery sub-block in the device record itself - this
                     # is what Studio actually reads to render the battery
-                    # icon on the device card. (The DeviceSetting push in
-                    # _push_battery is for older Studio versions; the field
-                    # here is what current Studio uses.) Populated by
-                    # _refresh_device_battery() right after attach.
+                    # icon on the device card. Field set matches stock
+                    # LCS exactly (chargeLevel is 0-5 raw, NOT a percent).
+                    # Populated by _refresh_device_battery right after attach.
                     "battery": {
                         "chargeLevel": -1,
+                        "level": -1,
                         "charging": False,
                         "docked": False,
                         "isChargeLevelValid": False,
-                        "level": -1,
+                        "realLevel": -1,
+                        "realMaxLevel": -1,
+                        "chargeLevelPercentage": -1,
                     },
                     "state": "Online",
                     "supportData": {"state": "Supported"},
