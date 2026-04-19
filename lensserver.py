@@ -99,10 +99,72 @@ else:
 PORT_FILE = PORT_FILE_DIR / "SocketPortNumber"
 
 
+from typing import Optional  # for the helpers below
+
+
+def _find_lcs_listening_port() -> Optional[int]:
+    """Locate the actual TCP port LCS is listening on, ignoring whatever
+    SocketPortNumber says (the file can be stale - a crashed lensserver
+    leaves its dead port in there).
+
+    Strategy: find the LensService.exe PID via tasklist, then query
+    netstat for any LISTENING TCP socket owned by that PID on 127.0.0.1.
+    Returns None if LCS isn't running or no listener is found.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        import subprocess
+        r = subprocess.run(
+            ["tasklist.exe", "/FI", "IMAGENAME eq LensService.exe", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, timeout=5,
+            creationflags=0x08000000,
+        )
+        line = (r.stdout or "").strip().splitlines()[0] if r.stdout else ""
+        if "LensService.exe" not in line:
+            return None
+        # CSV: "name","pid","session","sessNum","memUsage"
+        pid = line.split('","')[1]
+    except Exception:
+        return None
+    try:
+        r = subprocess.run(
+            ["netstat.exe", "-ano", "-p", "TCP"],
+            capture_output=True, text=True, timeout=5,
+            creationflags=0x08000000,
+        )
+    except Exception:
+        return None
+    for raw in (r.stdout or "").splitlines():
+        parts = raw.split()
+        if len(parts) < 5 or parts[3] != "LISTENING":
+            continue
+        if parts[-1] != pid:
+            continue
+        local = parts[1]  # 127.0.0.1:53431
+        if not local.startswith("127.0.0.1:"):
+            continue
+        try:
+            return int(local.rsplit(":", 1)[1])
+        except ValueError:
+            continue
+    return None
+
+
+def _detect_lcs_reachable() -> Optional[int]:
+    """Returns the actual LCS port if proxy mode is appropriate, else None.
+
+    Used by --proxy=auto to decide between proxy and standalone modes
+    at startup. Caller can pass the returned port directly to
+    LCSClient.start() instead of re-reading SocketPortNumber (which may
+    be stale from a previous lensserver run)."""
+    return _find_lcs_listening_port()
+
+
 class LensServer:
     """TCP server implementing the LensServiceApi protocol."""
 
-    def __init__(self, port=0, *, proxy_lcs=False):
+    def __init__(self, port=0, *, proxy_lcs=False, lcs_port=None):
         self.port = port
         self.server_sock = None
         self.clients = []  # list of client sockets
@@ -115,6 +177,10 @@ class LensServer:
         # When False, we behave as the standalone replacement we always
         # have - native_bridge is the data source.
         self.proxy_lcs = proxy_lcs
+        # Caller-supplied LCS port (from _find_lcs_listening_port). When
+        # None, start() falls back to whatever SocketPortNumber says,
+        # which may be a stale value from a previous lensserver crash.
+        self._lcs_port_override = lcs_port
         self._lcs_client = None
 
     _original_port = None  # saved port from real LensService
@@ -137,17 +203,26 @@ class LensServer:
         except Exception:
             pass
 
-        # Proxy mode: connect to LCS on the port we just captured BEFORE
-        # we overwrite SocketPortNumber with our own port. Has to happen
-        # here, not later, because we're about to make Studio find us
-        # instead of LCS.
-        if self.proxy_lcs and self._original_port:
-            try:
-                lcs_port = int(self._original_port)
-                self._start_lcs_proxy(lcs_port)
-            except (ValueError, Exception) as e:
-                _log(f"  proxy: startup failed ({e}) - falling back to standalone mode")
-                self._lcs_client = None
+        # Proxy mode: connect to LCS using either the caller-supplied
+        # port (from _find_lcs_listening_port) or whatever
+        # SocketPortNumber says. The override is preferred because the
+        # port file can be stale (a crashed previous lensserver leaves
+        # its dead port in there).
+        if self.proxy_lcs:
+            lcs_port = self._lcs_port_override
+            if not lcs_port and self._original_port:
+                try:
+                    lcs_port = int(self._original_port)
+                except (TypeError, ValueError):
+                    lcs_port = None
+            if lcs_port:
+                try:
+                    self._start_lcs_proxy(lcs_port)
+                except Exception as e:
+                    _log(f"  proxy: startup failed ({e}) - falling back to standalone mode")
+                    self._lcs_client = None
+            else:
+                _log("  proxy: no LCS port available - falling back to standalone mode")
 
         # Write our port file so Poly Studio can find us
         PORT_FILE_DIR.mkdir(parents=True, exist_ok=True)
@@ -202,7 +277,12 @@ class LensServer:
         Needed after any operation that restarts LCS (e.g. fix-setid's
         device_isolate): LCS overwrites the port file with its own port
         on startup, which would silently route Studio to LCS instead of
-        us on Studio's next reconnect."""
+        us on Studio's next reconnect.
+
+        In proxy mode, we also use the value LCS wrote as the trigger
+        to reconnect our LCSClient: if the port changed, our existing
+        connection is dead and the LCSClient needs to dial the new port.
+        """
         try:
             current = PORT_FILE.read_text().strip() if PORT_FILE.exists() else ""
         except Exception:
@@ -211,7 +291,28 @@ class LensServer:
             return  # already ours
         # Save what LCS reclaimed (so cleanup can still restore it later)
         if current and current != str(self.port):
+            old_lcs_port = self._original_port
             self._original_port = current
+            # Proxy mode: LCS just bounced and got a new port. Reconnect
+            # our LCSClient on the new value before reclaiming the file
+            # so consumers don't see a missing-LCS gap.
+            if (self.proxy_lcs and self._lcs_client
+                    and current != str(old_lcs_port)):
+                _log(f"  proxy: LCS port changed {old_lcs_port}->{current}, "
+                     "reconnecting client", verbose_only=True)
+                try:
+                    self._lcs_client.stop()
+                except Exception:
+                    pass
+                try:
+                    self._lcs_client.start(port=int(current),
+                                           wait_for_devices=True,
+                                           wait_timeout=4.0)
+                    # Re-import LCS's catalog after reconnect
+                    for lcs_dev in self._lcs_client.list_devices():
+                        self._ingest_lcs_device(lcs_dev)
+                except Exception as e:
+                    _log(f"  proxy: reconnect failed: {e}")
         try:
             PORT_FILE.write_text(str(self.port))
             _log(f"  Reclaimed port file: {self.port} (was {current!r})",
@@ -2058,11 +2159,12 @@ def main():
     parser.add_argument("--dump", action="store_true", help="Dump all messages to dump.jsonl")
     parser.add_argument("--verbose", action="store_true", help="Show all protocol messages and debug output")
     parser.add_argument("--quiet", action="store_true", help="Suppress all output except errors")
-    parser.add_argument("--proxy", action="store_true",
-                        help="Run in LCS proxy mode: connect to the live "
-                             "Poly Lens Control Service as a client and "
-                             "augment its data with our overrides instead "
-                             "of replacing it standalone")
+    parser.add_argument("--proxy", choices=["auto", "on", "off"], default="auto",
+                        help="LCS proxy mode: 'on' to require it (fail if LCS "
+                             "isn't running), 'off' for standalone replacement "
+                             "(historical behavior), 'auto' (default) to use "
+                             "proxy when LCS is reachable on the port file's "
+                             "port and fall back to standalone otherwise.")
     parser.add_argument("--http", type=int, default=8080, metavar="PORT",
                         help="HTTP API port (default: 8080, 0 to disable)")
     args = parser.parse_args()
@@ -2070,7 +2172,24 @@ def main():
     _verbose = args.verbose
     _quiet = args.quiet
 
-    server = LensServer(port=args.port, proxy_lcs=args.proxy)
+    # Resolve --proxy {auto, on, off} into a boolean:
+    #   on   - always proxy. If LCS isn't reachable, _start_lcs_proxy
+    #          falls back internally to standalone
+    #   off  - never proxy
+    #   auto - detect by trying to read SocketPortNumber and confirming
+    #          something is listening there
+    proxy_lcs = False
+    lcs_port = None
+    if args.proxy == "on":
+        proxy_lcs = True
+        lcs_port = _find_lcs_listening_port()
+    elif args.proxy == "auto":
+        lcs_port = _find_lcs_listening_port()
+        proxy_lcs = lcs_port is not None
+        _log(f"  proxy auto-detect: {'enabled' if proxy_lcs else 'disabled'} "
+             f"(LCS {'on port ' + str(lcs_port) if lcs_port else 'not running'})",
+             verbose_only=True)
+    server = LensServer(port=args.port, proxy_lcs=proxy_lcs, lcs_port=lcs_port)
     server.dump_mode = getattr(args, 'dump', False)
     if server.dump_mode:
         server.dump_file = open('dump.jsonl', 'w')
@@ -2080,7 +2199,7 @@ def main():
     # then we DON'T scan USB / native_bridge ourselves - LCS is the source
     # of truth and pushes us its catalog after we register.
     # Standalone mode: scan USB + BT first, then start the server.
-    if args.proxy:
+    if proxy_lcs:
         _log(f"  Starting TCP server (proxy mode)...", verbose_only=True)
         server.start()
         nb_count = len(server.devices)
