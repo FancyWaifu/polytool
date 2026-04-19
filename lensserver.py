@@ -264,6 +264,10 @@ class LensServer:
         # which may be a stale value from a previous lensserver crash.
         self._lcs_port_override = lcs_port
         self._lcs_client = None
+        # In proxy mode, when we forward a Studio request to LCS we
+        # remember which client to route LCS's response back to.
+        # Keyed by PLT_<serial> deviceId since that's what LCS echoes.
+        self._proxy_pending_responses = {}
 
     _original_port = None  # saved port from real LensService
 
@@ -494,6 +498,8 @@ class LensServer:
         self._lcs_client.on_device_attached(self._on_lcs_device_attached)
         self._lcs_client.on_device_updated(self._on_lcs_device_updated)
         self._lcs_client.on_device_detached(self._on_lcs_device_detached)
+        # Catch-all for settings responses we forwarded to LCS
+        self._lcs_client.on_raw_message(self._on_lcs_raw_message)
         return True
 
     def _ingest_lcs_device(self, lcs_dev: dict):
@@ -627,6 +633,77 @@ class LensServer:
                     dev["productName"] = base
                     dev["systemName"] = base
                     dev["deviceName"] = base
+
+    # ── Proxy request/response forwarding ──────────────────────────────
+
+    def _proxy_forward_to_lcs(self, msg: dict, client_sock):
+        """Send a Studio-originated message to LCS after rewriting our
+        8-char deviceId back to LCS's PLT_<32-char> form.
+
+        Records the originating client in self._proxy_pending_responses
+        so when LCS's response comes back through the raw handler, we
+        know who to forward it to.
+        """
+        our_id = msg.get("deviceId", "")
+        plt_id = self._our_id_to_plt(our_id)
+        forwarded = dict(msg)
+        if plt_id:
+            forwarded["deviceId"] = plt_id
+        # Track which client to send the response to. LCS doesn't echo
+        # our request_id back reliably, so we just remember "the most
+        # recent client to ask about this deviceId" - in practice it's
+        # always Studio, and we only have one Studio at a time.
+        self._proxy_pending_responses[plt_id] = client_sock
+        self._lcs_client.send(forwarded)
+        _log(f"  proxy -> LCS: {msg.get('type')} for {plt_id}", verbose_only=True)
+
+    def _our_id_to_plt(self, our_id: str) -> str:
+        """8-char our-id back to PLT_<32-char> for LCS."""
+        with self._lock:
+            dev = self.devices.get(our_id, {})
+        serial = dev.get("serialNumber") or dev.get("_polytool_dev", {}).get("serial", "")
+        if serial:
+            return f"PLT_{serial}"
+        return our_id  # Best-effort - LCS will fail the lookup
+
+    def _plt_to_our_id(self, plt_id: str) -> str:
+        """PLT_<32-char> back to our 8-char id."""
+        if plt_id.startswith("PLT_"):
+            return plt_id[4:12]
+        return plt_id[:8]
+
+    def _on_lcs_raw_message(self, lcs_msg: dict):
+        """Catch-all handler for messages from LCS. In proxy mode we
+        forward settings-related responses back to whichever Studio
+        client originated the request (tracked in
+        self._proxy_pending_responses). DeviceList / DeviceAttached /
+        DeviceUpdated / DeviceDetached are still handled by the typed
+        handlers in lcs_client; we don't double-forward those."""
+        t = lcs_msg.get("type", "")
+        # Only forward response types we explicitly proxy. Skip event
+        # types our typed handlers already process.
+        if t not in ("DeviceSettings", "DeviceSettingsMetadata",
+                     "DeviceSetting", "DeviceSettingChanged",
+                     "DeviceSettingChangedConfirmed", "Error"):
+            return
+        plt_id = lcs_msg.get("deviceId", "")
+        client = self._proxy_pending_responses.get(plt_id)
+        if not client:
+            # Broadcast to all clients - LCS may push DeviceSettings
+            # spontaneously (settings changes reflected from another
+            # client, etc.)
+            translated = dict(lcs_msg)
+            if plt_id:
+                translated["deviceId"] = self._plt_to_our_id(plt_id)
+            self.broadcast(translated)
+            return
+        translated = dict(lcs_msg)
+        translated["deviceId"] = self._plt_to_our_id(plt_id)
+        try:
+            self.send_msg(client, translated)
+            _log(f"  proxy <- LCS: {t} for {self._plt_to_our_id(plt_id)}", verbose_only=True)
+        except Exception as e:
+            _log(f"  proxy: failed to forward {t}: {e}", verbose_only=True)
 
     def _on_lcs_device_attached(self, lcs_dev: dict):
         self._ingest_lcs_device(lcs_dev)
@@ -832,6 +909,23 @@ class LensServer:
             "LogsPrepared": self.on_logs_prepared,
             "GAnalyticsSent": self.on_analytics,
         }
+
+        # Proxy mode: forward settings/setting queries to LCS instead of
+        # answering them ourselves. LCS has the full per-device settings
+        # tree (it queries the device over PolyBus); our standalone
+        # settings cache is only populated via _populate_settings_cache,
+        # which never runs in proxy mode. Forwarding gives Studio access
+        # to settings for every device LCS knows about - including
+        # Voyager / Focus 2 / Sync devices we don't have HID profiles for.
+        if (self.proxy_lcs and self._lcs_client
+                and msg_type in ("GetDeviceSettings",
+                                 "GetDeviceSettingsMetadata",
+                                 "GetDeviceSetting",
+                                 "GetSingleDeviceSetting",
+                                 "SetDeviceSetting",
+                                 "SetSingleDeviceSetting")):
+            self._proxy_forward_to_lcs(msg, client_sock)
+            return None  # response will arrive via the raw LCS handler
 
         handler = handlers.get(msg_type)
         if handler:
