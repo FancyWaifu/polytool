@@ -85,6 +85,10 @@ CODENAME_MAP = {
     "Owl": "Voyager 4400 UC",
     "Hydra": "Savi 7300/7400",
     "Poseidon": "Savi 7200",
+    # dfu.config DeviceDescription codenames that aren't user-friendly:
+    "Chickadee": "Voyager Base-M CD",
+    "Heron Stereo Teams": "Voyager Focus 2 Teams",
+    "Heron Stereo": "Voyager Focus 2",
     "Cinnamon": "Poly Studio Display",
     "Calisto Pro": "Calisto Pro",
     "Calisto 800": "Calisto 800",

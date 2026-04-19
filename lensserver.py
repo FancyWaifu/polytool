@@ -99,14 +99,86 @@ else:
 PORT_FILE = PORT_FILE_DIR / "SocketPortNumber"
 
 
-# Per-serial display-name overrides. Anything in this dict wins over both
-# LCS's productName and our auto-disambiguated default. Lets the user
-# rename specific units; also a useful proof-of-MITM (set a name here and
-# Studio displays it, demonstrating we control what Studio sees).
+# Per-serial display-name overrides. Anything in this dict wins over the
+# auto-formatted default. Add entries here to force a specific name for
+# a specific physical unit. Empty by default - the canonical format
+# (see _format_display_name) handles the standard case.
 DEVICE_NAME_OVERRIDES = {
-    # Demo: prove the MITM is active end-to-end
-    "377CF5FD4D5A4E1CA151FF7FAA3A5E8A": "Awesome headset",  # S/N2UGHYA Savi 7320
+    # Example:
+    # "377CF5FD4D5A4E1CA151FF7FAA3A5E8A": "Reception desk",
 }
+
+
+def _format_display_name(*, friendly_name: str, model_description: str,
+                         tattoo: str, lcs_product_name: str = "",
+                         serial: str = "") -> str:
+    """Build the canonical display name for a Poly device.
+
+    Format:  Poly <model name> <model number> - <S/N>
+
+    Examples:
+        Poly Savi 7320 - S/N2UGHYA
+        Poly Savi 8220 - S/N506C1E
+        Poly Blackwire 3220 - S/N1D8C82
+
+    Sources, in order of preference for the model portion:
+      friendly_name      - PolyDevice.friendly_name, which has CODENAME_MAP
+                           translations applied (e.g. "Yen Stereo" -> "Savi 8220")
+      model_description  - raw dfu.config DeviceDescription
+      lcs_product_name   - last-resort fallback when nothing else is known
+
+    For the serial portion: prefer the human tattoo (S/Nxxxx printed on
+    the device label). When unavailable, synthesize one from the last 6
+    chars of the GUID-style serial so two units of the same model still
+    look distinct.
+    """
+    # Prefer friendly_name (which has CODENAME_MAP applied via PID_CODENAMES),
+    # but if it just echoes a dfu.config codename ("Chickadee", "Heron
+    # Stereo Teams"), translate via CODENAME_MAP directly.
+    from devices import CODENAME_MAP
+    base = (friendly_name or model_description or "").strip()
+    # Check both the friendly_name string AND its "Poly "-stripped form
+    # against CODENAME_MAP - dfu.config descriptions sometimes get
+    # _polyize'd into "Poly Chickadee" which then doesn't match the
+    # CODENAME_MAP key "Chickadee".
+    base_unprefixed = base
+    for prefix in ("Poly ", "Plantronics ", "HP "):
+        if base_unprefixed.startswith(prefix):
+            base_unprefixed = base_unprefixed[len(prefix):]
+            break
+    if base_unprefixed in CODENAME_MAP:
+        base = CODENAME_MAP[base_unprefixed]
+    elif (model_description or "").strip() in CODENAME_MAP:
+        base = CODENAME_MAP[model_description.strip()]
+    if not base:
+        base = (lcs_product_name or "").strip()
+        if base.endswith(" Series"):
+            base = base[:-len(" Series")]
+    if not base:
+        return lcs_product_name or "Poly Device"
+
+    # Normalize a few variant spellings that appear in dfu.config but
+    # aren't how Poly markets the products:
+    #   "Black Wire" -> "Blackwire"   (one word in product naming)
+    #   "Yen Stereo / W8220T" left to CODENAME_MAP - shouldn't reach here
+    base = base.replace("Black Wire", "Blackwire")
+
+    # Prefix with "Poly " unless the model already has a brand prefix.
+    if not base.startswith(("Poly ", "Plantronics ", "HP ")):
+        base = f"Poly {base}"
+
+    # Tattoo should look like S/Nxxxxxxx - if it's actually a 32-char
+    # GUID (some LCS records put the genes-id under tattooSerialNumber
+    # when there's no real tattoo), fall back to a S/N-prefixed short form.
+    sn = (tattoo or "").strip()
+    if sn and (len(sn) >= 24 and sn.isalnum()):
+        # Looks like a GUID, not a real tattoo
+        sn = ""
+    if not sn and serial:
+        sn = "S/N" + serial[-6:].upper()
+    if sn:
+        return f"{base} - {sn}"
+    return base
 
 
 from typing import Optional  # for the helpers below
@@ -410,10 +482,12 @@ class LensServer:
             self._lcs_client = None
             return False
 
-        # Initial population of our device table from LCS's catalog
+        # Initial population of our device table from LCS's catalog.
+        # The canonical name format already includes the tattoo serial
+        # so collisions can't happen - no separate disambiguation pass
+        # needed.
         for lcs_dev in self._lcs_client.list_devices():
             self._ingest_lcs_device(lcs_dev)
-        self._redisambiguate_all_devices()
         _log(f"  proxy: imported {len(self.devices)} device(s) from LCS")
 
         # Subscribe to event-stream changes
@@ -435,12 +509,17 @@ class LensServer:
         # to get model_description/display_name/firmware_components.
         from devices import PolyDevice, classify_device, _hydrate_from_lcs_cache
         from polytool import _normalize_version  # noqa: F401
+        # LCS always sends VID/PID as hex strings, even when the value
+        # happens to be all digits (e.g. "167" is hex 0x167 = 359 decimal).
+        # Always parse as base 16 - parsing as decimal would land on the
+        # wrong PID for any device whose hex value is all-numeric digits
+        # (Voyager 4320 = 0x167, Voyager Focus 2 = 0x162, etc.).
         try:
-            pid = int(lcs_dev.get("pid", "0"), 16) if isinstance(lcs_dev.get("pid"), str) and not lcs_dev["pid"].isdigit() else int(lcs_dev.get("pid", 0))
+            pid = int(str(lcs_dev.get("pid", "0")), 16)
         except (TypeError, ValueError):
             pid = 0
         try:
-            vid = int(lcs_dev.get("vid", "0"), 16) if isinstance(lcs_dev.get("vid"), str) and not lcs_dev["vid"].isdigit() else int(lcs_dev.get("vid", 0))
+            vid = int(str(lcs_dev.get("vid", "0")), 16)
         except (TypeError, ValueError):
             vid = 0x047F
         ptd = PolyDevice(vid=vid, pid=pid, serial=serial,
@@ -448,11 +527,20 @@ class LensServer:
         classify_device(ptd)
         _hydrate_from_lcs_cache([ptd])  # picks up tattoo + firmware_components
 
-        disp_name = ptd.display_name or lcs_dev.get("productName") or "Unknown"
-        # User-specified name override - takes precedence over auto-disambig
+        # Canonical name format: "Poly <model> - <S/Ntattoo>"
+        # User-specified override (DEVICE_NAME_OVERRIDES) wins over the
+        # canonical format if present.
         override = DEVICE_NAME_OVERRIDES.get(serial)
         if override:
             disp_name = override
+        else:
+            disp_name = _format_display_name(
+                friendly_name=ptd.friendly_name,
+                model_description=ptd.model_description,
+                tattoo=ptd.tattoo_serial,
+                lcs_product_name=lcs_dev.get("productName", ""),
+                serial=serial,
+            )
         # Preserve our existing record if any (so we don't lose
         # _polytool_dev / _native_id), then merge LCS's fields on top.
         with self._lock:
@@ -542,7 +630,6 @@ class LensServer:
 
     def _on_lcs_device_attached(self, lcs_dev: dict):
         self._ingest_lcs_device(lcs_dev)
-        self._redisambiguate_all_devices()
         serial = lcs_dev.get("serialNumber", "")
         our_id = serial[:8] if serial else lcs_dev.get("deviceId", "")[:8]
         with self._lock:
