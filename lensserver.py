@@ -403,6 +403,7 @@ class LensServer:
         # Initial population of our device table from LCS's catalog
         for lcs_dev in self._lcs_client.list_devices():
             self._ingest_lcs_device(lcs_dev)
+        self._redisambiguate_all_devices()
         _log(f"  proxy: imported {len(self.devices)} device(s) from LCS")
 
         # Subscribe to event-stream changes
@@ -450,7 +451,14 @@ class LensServer:
         augmented["deviceName"] = disp_name
         augmented["displaySerialNumber"] = ptd.tattoo_serial or serial or ""
         augmented["tattooSerialNumber"] = ptd.tattoo_serial or serial or ""
-        augmented["firmwareVersion"] = ptd.firmware_display or augmented.get("firmwareVersion", "")
+        # Prefer LCS's firmwareVersion (it knows the real value via the
+        # device cache) over PolyDevice.firmware_display (which derives
+        # from USB bcdDevice and is "unknown" without release_number,
+        # which we don't have when constructing PolyDevice from the LCS
+        # payload). Only fall back to PolyDevice when LCS gave us nothing.
+        lcs_fw = (lcs_dev.get("firmwareVersion") or "").strip()
+        derived_fw = ptd.firmware_display if ptd.firmware_display != "unknown" else ""
+        augmented["firmwareVersion"] = lcs_fw or derived_fw or "unknown"
         augmented["firmwareComponents"] = {
             "usbVersion": _comp(ptd, "usb") or ptd.firmware_display,
             "baseVersion": _comp(ptd, "base"),
@@ -478,8 +486,44 @@ class LensServer:
         with self._lock:
             self.devices[our_id] = augmented
 
+    def _redisambiguate_all_devices(self):
+        """After ingesting a device, walk the full device list and append
+        tattoo suffixes to any name that collides with another device's
+        name. Mirrors the standalone-mode `_disambiguate_names` but works
+        against our cached self.devices instead of a fresh discovery."""
+        with self._lock:
+            devs = list(self.devices.items())
+        # Strip any existing parenthetical suffix so we work from base names
+        from re import sub as _resub
+        base_names = {}
+        for did, dev in devs:
+            base = _resub(r"\s*\([^)]*\)\s*$", "", dev.get("productName", ""))
+            base_names[did] = base
+        # Count base names
+        counts = {}
+        for n in base_names.values():
+            counts[n] = counts.get(n, 0) + 1
+        # Apply suffix where there's a collision
+        with self._lock:
+            for did, dev in self.devices.items():
+                base = base_names.get(did, "")
+                if counts.get(base, 0) > 1:
+                    tattoo = dev.get("tattooSerialNumber") or dev.get("displaySerialNumber") or ""
+                    if tattoo and not tattoo.startswith(dev.get("serialNumber", "")[:6]):
+                        # Tattoo is a human-friendly value (S/Nxxxxx), not the GUID
+                        new_name = f"{base} ({tattoo})"
+                        dev["productName"] = new_name
+                        dev["systemName"] = new_name
+                        dev["deviceName"] = new_name
+                else:
+                    # No collision — strip any tattoo we previously appended
+                    dev["productName"] = base
+                    dev["systemName"] = base
+                    dev["deviceName"] = base
+
     def _on_lcs_device_attached(self, lcs_dev: dict):
         self._ingest_lcs_device(lcs_dev)
+        self._redisambiguate_all_devices()
         serial = lcs_dev.get("serialNumber", "")
         our_id = serial[:8] if serial else lcs_dev.get("deviceId", "")[:8]
         with self._lock:
