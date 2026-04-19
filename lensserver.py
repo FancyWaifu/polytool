@@ -678,7 +678,16 @@ class LensServer:
         client originated the request (tracked in
         self._proxy_pending_responses). DeviceList / DeviceAttached /
         DeviceUpdated / DeviceDetached are still handled by the typed
-        handlers in lcs_client; we don't double-forward those."""
+        handlers in lcs_client; we don't double-forward those.
+
+        Special case: when LCS replies with DeviceSettings, Studio also
+        needs a DeviceSettingsMetadata event before it'll render the
+        settings page. LCS doesn't send that separately - the meta info
+        is embedded in each setting's `meta` field. Extract those into
+        a synthesized DeviceSettingsMetadata message and send it
+        BEFORE the DeviceSettings, mirroring what our standalone-mode
+        on_get_device_settings handler does.
+        """
         t = lcs_msg.get("type", "")
         # Only forward response types we explicitly proxy. Skip event
         # types our typed handlers already process.
@@ -687,21 +696,51 @@ class LensServer:
                      "DeviceSettingChangedConfirmed", "Error"):
             return
         plt_id = lcs_msg.get("deviceId", "")
+        our_id = self._plt_to_our_id(plt_id) if plt_id else ""
         client = self._proxy_pending_responses.get(plt_id)
-        if not client:
-            # Broadcast to all clients - LCS may push DeviceSettings
-            # spontaneously (settings changes reflected from another
-            # client, etc.)
-            translated = dict(lcs_msg)
-            if plt_id:
-                translated["deviceId"] = self._plt_to_our_id(plt_id)
-            self.broadcast(translated)
-            return
         translated = dict(lcs_msg)
-        translated["deviceId"] = self._plt_to_our_id(plt_id)
+        if plt_id:
+            translated["deviceId"] = our_id
+
+        # If this is a DeviceSettings response, synthesize and send a
+        # DeviceSettingsMetadata first - Studio's UI binds to the
+        # metadata event to know what controls to render. Without it
+        # the settings page comes up blank even though the data is here.
+        if t == "DeviceSettings":
+            settings = translated.get("settings") or []
+            metadata_settings = []
+            for s in settings:
+                meta = s.get("meta")
+                if not meta:
+                    continue
+                metadata_settings.append({
+                    "name": s.get("name", ""),
+                    "meta": meta,
+                })
+            metadata_msg = {
+                "type": "DeviceSettingsMetadata",
+                "apiVersion": API_VERSION,
+                "deviceId": our_id,
+                "settings": metadata_settings,
+            }
+            try:
+                if client:
+                    self.send_msg(client, metadata_msg)
+                else:
+                    self.broadcast(metadata_msg)
+                _log(f"  proxy <- LCS: synthesized DeviceSettingsMetadata "
+                     f"({len(metadata_settings)} settings) for {our_id}",
+                     verbose_only=True)
+            except Exception as e:
+                _log(f"  proxy: failed to send synthesized metadata: {e}",
+                     verbose_only=True)
+
         try:
-            self.send_msg(client, translated)
-            _log(f"  proxy <- LCS: {t} for {self._plt_to_our_id(plt_id)}", verbose_only=True)
+            if client:
+                self.send_msg(client, translated)
+            else:
+                self.broadcast(translated)
+            _log(f"  proxy <- LCS: {t} for {our_id}", verbose_only=True)
         except Exception as e:
             _log(f"  proxy: failed to forward {t}: {e}", verbose_only=True)
 
