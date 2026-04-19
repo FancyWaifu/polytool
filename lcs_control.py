@@ -108,7 +108,17 @@ def disable_lcs(log=print) -> bool:
 
 
 def enable_lcs(log=print, start_now: bool = True) -> bool:
-    """Restore LCS to Automatic startup. Optionally start it now."""
+    """Restore LCS to Automatic startup. Optionally start it now AND
+    relaunch the per-user process watchdogs that LCS depends on for
+    LegacyHost / CallControlApp.
+
+    The watchdogs (com.poly.lens.client.watchdog.lh /
+    .watchdog.cc) are normally launched at user logon by HKCU Run keys.
+    When we manually start LCS outside that flow, the watchdogs aren't
+    running, which means LegacyHost never spawns - and without
+    LegacyHost, LCS can't actually communicate with DECT devices. Poly
+    Studio then shows zero working headsets even though LCS is "up."
+    """
     if sys.platform != "win32":
         log("  lcs: not on Windows")
         return False
@@ -121,8 +131,46 @@ def enable_lcs(log=print, start_now: bool = True) -> bool:
         if r.returncode != 0 and "already" not in (r.stdout or "").lower():
             log(f"  lcs: start failed: {(r.stderr or r.stdout).strip()[:200]}")
             return False
+        _relaunch_poly_watchdogs(log=log)
     log("  lcs: enabled")
     return True
+
+
+_WATCHDOG_EXE = r"C:\Program Files\Poly\Poly Studio\ProcessWatchdog\PolyLensProcessWatchdog.exe"
+_WATCHED_TARGETS = [
+    r"C:\Program Files\Poly\Poly Studio\LegacyHost\LegacyHost.exe",
+    r"C:\Program Files\Poly\Poly Studio\CallControlApp\PolyLensCallControlApp.exe",
+]
+
+
+def _relaunch_poly_watchdogs(log=print) -> None:
+    """Spawn the two PolyLensProcessWatchdog instances that respectively
+    keep LegacyHost.exe and PolyLensCallControlApp.exe alive. Idempotent
+    (does nothing if the watchdogs are already up). Best-effort - failure
+    to spawn is logged but not raised."""
+    from pathlib import Path
+    if not Path(_WATCHDOG_EXE).exists():
+        log("  lcs: watchdog binary not found - skipping")
+        return
+    # Skip if a watchdog process is already running (rough check)
+    r = _run(["tasklist.exe", "/FI", "IMAGENAME eq PolyLensProcessWatchdog.exe", "/FO", "CSV"])
+    if "PolyLensProcessWatchdog" in (r.stdout or ""):
+        log("  lcs: watchdogs already running")
+        return
+    DETACHED = 0x00000008
+    for target in _WATCHED_TARGETS:
+        if not Path(target).exists():
+            continue
+        try:
+            subprocess.Popen(
+                [_WATCHDOG_EXE, target],
+                creationflags=DETACHED | _NO_WINDOW,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                close_fds=True,
+            )
+        except Exception as e:
+            log(f"  lcs: watchdog spawn failed for {Path(target).name}: {e}")
+    log("  lcs: relaunched watchdogs (LegacyHost + CallControlApp)")
 
 
 @contextlib.contextmanager
