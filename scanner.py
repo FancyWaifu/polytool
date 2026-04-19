@@ -160,22 +160,31 @@ def cmd_info(args):
             if dev.is_in_recovery else "no"
         )
 
+        # Mirror Poly Studio's device-detail card: status, then name +
+        # model, then battery (the visual hero), then the firmware/version
+        # block, then identification details, then DFU/diagnostic info
+        # at the bottom for power users.
+        connected = "[bold green]Connected[/]" if HAS_RICH else "Connected"
         if HAS_RICH:
             info_lines = [
+                f"[bold]Status:[/]         {connected}",
                 f"[bold]Product:[/]        {dev.display_name}",
                 f"[bold]Model:[/]          {dev.model_description or 'n/a'}",
+                "",
+                f"[bold]Battery:[/]        {dev.battery_display}",
+                f"[bold]Firmware:[/]       {dev.firmware_display}",
+                f"[bold]Components:[/]     {comp_str}",
+                "",
                 f"[bold]Manufacturer:[/]   {dev.manufacturer}",
                 f"[bold]Serial:[/]         {dev.serial or 'n/a'}",
                 f"[bold]Tattoo:[/]         {dev.tattoo_serial or 'n/a'}",
-                f"[bold]Firmware:[/]       {dev.firmware_display}",
-                f"[bold]Components:[/]     {comp_str}",
                 f"[bold]Category:[/]       {dev.category}",
                 f"[bold]VID:PID:[/]        {dev.vid_hex}:{dev.pid_hex}",
                 f"[bold]USB/BT:[/]         {dev.bus_type}",
                 f"[bold]Usage Page:[/]     0x{dev.usage_page:04X}",
-                f"[bold]Battery:[/]        {dev.battery_display}",
                 f"[bold]Codename:[/]       {dev.codename or 'n/a'}",
                 f"[bold]LensProductID:[/]  {dev.lens_product_id}",
+                "",
                 f"[bold]DFU Executor:[/]   {dev.dfu_executor or 'n/a'}",
                 f"[bold]DFU Handlers:[/]   {handlers_str}",
                 f"[bold]DFU Transport:[/]  {transport_str}",
@@ -199,17 +208,21 @@ def cmd_info(args):
             print(f"\n{'='*60}")
             print(f"  {dev.display_name}")
             print(f"{'='*60}")
+            print(f"  Status:        Connected")
             print(f"  Model:         {dev.model_description or 'n/a'}")
+            print()
+            print(f"  Battery:       {dev.battery_display}")
+            print(f"  Firmware:      {dev.firmware_display}")
+            print(f"  Components:    {comp_str}")
+            print()
             print(f"  Manufacturer:  {dev.manufacturer}")
             print(f"  Serial:        {dev.serial or 'n/a'}")
             print(f"  Tattoo:        {dev.tattoo_serial or 'n/a'}")
-            print(f"  Firmware:      {dev.firmware_display}")
-            print(f"  Components:    {comp_str}")
             print(f"  Category:      {dev.category}")
             print(f"  VID:PID:       {dev.vid_hex}:{dev.pid_hex}")
             print(f"  USB/BT:        {dev.bus_type}")
-            print(f"  Battery:       {dev.battery_display}")
             print(f"  Codename:      {dev.codename or 'n/a'}")
+            print()
             print(f"  DFU Executor:  {dev.dfu_executor or 'n/a'}")
             print(f"  DFU Handlers:  {handlers_str}")
             print(f"  DFU Transport: {transport_str}")

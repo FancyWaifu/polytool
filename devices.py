@@ -520,11 +520,15 @@ class Output:
             return
 
         if self.console:
+            # Mirror Poly Studio's card layout: name first, then battery,
+            # then firmware. Battery before FW makes the at-a-glance scan
+            # match Studio's UI hierarchy (status badge -> name -> battery
+            # gauge -> version line).
             table = Table(title=title, box=box.ROUNDED, show_lines=False)
             table.add_column("#", style="dim", width=2, no_wrap=True)
             table.add_column("Device", style="bold white", no_wrap=True, max_width=44)
-            table.add_column("Firmware", style="green", no_wrap=True, max_width=40)
             table.add_column("Battery", style="yellow", no_wrap=True)
+            table.add_column("Firmware", style="green", no_wrap=True, max_width=40)
             table.add_column("VID:PID", style="dim", no_wrap=True)
             table.add_column("Category", style="magenta", no_wrap=True)
 
@@ -538,15 +542,12 @@ class Output:
                         bat = f"[yellow]{bat}[/]"
                     else:
                         bat = f"[red]{bat}[/]"
-                # Prefer the per-component summary when available (more honest
-                # for multi-component DECT/Savi devices); otherwise fall back
-                # to firmware_display.
                 fw = dev.firmware_components_display or dev.firmware_display
                 table.add_row(
                     str(i),
                     name,
-                    fw,
                     bat,
+                    fw,
                     f"{dev.vid:04X}:{dev.pid:04X}",
                     dev.category,
                 )
@@ -554,8 +555,8 @@ class Output:
         else:
             print(f"\n{title}")
             print("-" * 130)
-            fmt = "{:<3} {:<44} {:<16} {:<40} {:<13} {:<11}"
-            print(fmt.format("#", "Device", "Serial", "FW", "Battery", "VID:PID"))
+            fmt = "{:<3} {:<44} {:<16} {:<13} {:<40} {:<11}"
+            print(fmt.format("#", "Device", "Serial", "Battery", "FW", "VID:PID"))
             print("-" * 130)
             for i, dev in enumerate(devices, 1):
                 name = dev.display_name
@@ -564,8 +565,8 @@ class Output:
                     i,
                     name[:44],
                     (dev.serial or "n/a")[:16],
-                    fw[:40],
                     dev.battery_display[:13],
+                    fw[:40],
                     f"{dev.vid:04X}:{dev.pid:04X}",
                 ))
 
