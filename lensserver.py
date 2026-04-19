@@ -99,6 +99,16 @@ else:
 PORT_FILE = PORT_FILE_DIR / "SocketPortNumber"
 
 
+# Per-serial display-name overrides. Anything in this dict wins over both
+# LCS's productName and our auto-disambiguated default. Lets the user
+# rename specific units; also a useful proof-of-MITM (set a name here and
+# Studio displays it, demonstrating we control what Studio sees).
+DEVICE_NAME_OVERRIDES = {
+    # Demo: prove the MITM is active end-to-end
+    "377CF5FD4D5A4E1CA151FF7FAA3A5E8A": "Awesome headset",  # S/N2UGHYA Savi 7320
+}
+
+
 from typing import Optional  # for the helpers below
 
 
@@ -439,6 +449,10 @@ class LensServer:
         _hydrate_from_lcs_cache([ptd])  # picks up tattoo + firmware_components
 
         disp_name = ptd.display_name or lcs_dev.get("productName") or "Unknown"
+        # User-specified name override - takes precedence over auto-disambig
+        override = DEVICE_NAME_OVERRIDES.get(serial)
+        if override:
+            disp_name = override
         # Preserve our existing record if any (so we don't lose
         # _polytool_dev / _native_id), then merge LCS's fields on top.
         with self._lock:
@@ -503,9 +517,14 @@ class LensServer:
         counts = {}
         for n in base_names.values():
             counts[n] = counts.get(n, 0) + 1
-        # Apply suffix where there's a collision
+        # Apply suffix where there's a collision. Skip devices that have
+        # an explicit user override - those are the user's choice and
+        # shouldn't get auto-mangled.
         with self._lock:
             for did, dev in self.devices.items():
+                serial = dev.get("serialNumber", "") or ""
+                if serial in DEVICE_NAME_OVERRIDES:
+                    continue  # user-set name wins, leave it alone
                 base = base_names.get(did, "")
                 if counts.get(base, 0) > 1:
                     tattoo = dev.get("tattooSerialNumber") or dev.get("displaySerialNumber") or ""
