@@ -102,13 +102,20 @@ PORT_FILE = PORT_FILE_DIR / "SocketPortNumber"
 class LensServer:
     """TCP server implementing the LensServiceApi protocol."""
 
-    def __init__(self, port=0):
+    def __init__(self, port=0, *, proxy_lcs=False):
         self.port = port
         self.server_sock = None
         self.clients = []  # list of client sockets
         self.devices = {}  # deviceId → device info dict
         self.running = False
         self._lock = threading.Lock()
+        # Proxy mode: connect to LCS as a client, augment its data with
+        # our overrides (display_name, FFFF strip, firmware version,
+        # update statuses), then serve the augmented view to Studio.
+        # When False, we behave as the standalone replacement we always
+        # have - native_bridge is the data source.
+        self.proxy_lcs = proxy_lcs
+        self._lcs_client = None
 
     _original_port = None  # saved port from real LensService
 
@@ -122,11 +129,25 @@ class LensServer:
         self.running = True
 
         # Save original port file (so we can restore it on exit)
+        # In proxy mode this is ALSO the port LCS is listening on, which
+        # is what we'll use for the LCSClient connection.
         try:
             if PORT_FILE.exists():
                 self._original_port = PORT_FILE.read_text().strip()
         except Exception:
             pass
+
+        # Proxy mode: connect to LCS on the port we just captured BEFORE
+        # we overwrite SocketPortNumber with our own port. Has to happen
+        # here, not later, because we're about to make Studio find us
+        # instead of LCS.
+        if self.proxy_lcs and self._original_port:
+            try:
+                lcs_port = int(self._original_port)
+                self._start_lcs_proxy(lcs_port)
+            except (ValueError, Exception) as e:
+                _log(f"  proxy: startup failed ({e}) - falling back to standalone mode")
+                self._lcs_client = None
 
         # Write our port file so Poly Studio can find us
         PORT_FILE_DIR.mkdir(parents=True, exist_ok=True)
@@ -259,6 +280,144 @@ class LensServer:
                 continue
             except OSError:
                 break
+
+    # ── Proxy-mode plumbing ─────────────────────────────────────────────
+
+    def _start_lcs_proxy(self, lcs_port: int):
+        """Connect to LCS as a client and wire its events into our data
+        flow. lcs_port is the port we captured BEFORE overwriting the
+        SocketPortNumber file with our own port."""
+        from lcs_client import LCSClient
+
+        self._lcs_client = LCSClient(name="polytool-lensserver-proxy",
+                                     log=lambda s: _log(f"  lcs-client: {s}",
+                                                        verbose_only=True))
+        ok = self._lcs_client.start(port=lcs_port,
+                                    wait_for_devices=True, wait_timeout=8.0)
+        if not ok:
+            _log("  proxy: LCS client failed to start - falling back to native_bridge")
+            self._lcs_client = None
+            return False
+
+        # Initial population of our device table from LCS's catalog
+        for lcs_dev in self._lcs_client.list_devices():
+            self._ingest_lcs_device(lcs_dev)
+        _log(f"  proxy: imported {len(self.devices)} device(s) from LCS")
+
+        # Subscribe to event-stream changes
+        self._lcs_client.on_device_attached(self._on_lcs_device_attached)
+        self._lcs_client.on_device_updated(self._on_lcs_device_updated)
+        self._lcs_client.on_device_detached(self._on_lcs_device_detached)
+        return True
+
+    def _ingest_lcs_device(self, lcs_dev: dict):
+        """Take a device record from LCS, apply our overrides (display
+        name, FFFF strip, synthesized firmware version, update statuses)
+        and store it in our self.devices catalog under our 8-char id."""
+        # Map LCS's deviceId (PLT_<32-char-serial>) to our 8-char id so
+        # downstream code (settings cache, DFU cache, the HTTP API) keeps
+        # using the same key it always has.
+        serial = lcs_dev.get("serialNumber", "") or ""
+        our_id = serial[:8] if serial else lcs_dev.get("deviceId", "")[:8]
+        # Apply per-device overrides. Use polytool's PolyDevice classifier
+        # to get model_description/display_name/firmware_components.
+        from devices import PolyDevice, classify_device, _hydrate_from_lcs_cache
+        from polytool import _normalize_version  # noqa: F401
+        try:
+            pid = int(lcs_dev.get("pid", "0"), 16) if isinstance(lcs_dev.get("pid"), str) and not lcs_dev["pid"].isdigit() else int(lcs_dev.get("pid", 0))
+        except (TypeError, ValueError):
+            pid = 0
+        try:
+            vid = int(lcs_dev.get("vid", "0"), 16) if isinstance(lcs_dev.get("vid"), str) and not lcs_dev["vid"].isdigit() else int(lcs_dev.get("vid", 0))
+        except (TypeError, ValueError):
+            vid = 0x047F
+        ptd = PolyDevice(vid=vid, pid=pid, serial=serial,
+                         tattoo_serial=lcs_dev.get("tattooSerialNumber", "") or "")
+        classify_device(ptd)
+        _hydrate_from_lcs_cache([ptd])  # picks up tattoo + firmware_components
+
+        disp_name = ptd.display_name or lcs_dev.get("productName") or "Unknown"
+        # Preserve our existing record if any (so we don't lose
+        # _polytool_dev / _native_id), then merge LCS's fields on top.
+        with self._lock:
+            existing = self.devices.get(our_id, {})
+        # Build the augmented record
+        augmented = dict(lcs_dev)  # start from LCS's full payload (battery!)
+        augmented["deviceId"] = our_id  # our 8-char id, not PLT_<serial>
+        augmented["productName"] = disp_name
+        augmented["systemName"] = disp_name
+        augmented["deviceName"] = disp_name
+        augmented["displaySerialNumber"] = ptd.tattoo_serial or serial or ""
+        augmented["tattooSerialNumber"] = ptd.tattoo_serial or serial or ""
+        augmented["firmwareVersion"] = ptd.firmware_display or augmented.get("firmwareVersion", "")
+        augmented["firmwareComponents"] = {
+            "usbVersion": _comp(ptd, "usb") or ptd.firmware_display,
+            "baseVersion": _comp(ptd, "base"),
+            "tuningVersion": _comp(ptd, "tuning"),
+            "picVersion": _comp(ptd, "pic"),
+            "cameraVersion": _comp(ptd, "camera"),
+            "headsetVersion": _comp(ptd, "headset"),
+            "headsetLanguageVersion": "",
+            "bluetoothVersion": _comp(ptd, "bluetooth"),
+            "setIdVersion": _comp(ptd, "setid"),
+        }
+        # Strip FFFF placeholder values from the firmware-version dict
+        # if LCS sent any (some Studio versions choke on them).
+        augmented["firmwareVersion"] = _sanitize_firmware_components(
+            augmented.get("firmwareVersion"))
+        # Preserve internal fields we set elsewhere
+        for k in list(existing.keys()):
+            if k.startswith("_"):
+                augmented[k] = existing[k]
+        # Cache a polytool-side summary so other code paths can read it
+        augmented["_polytool_dev"] = {
+            "serial": serial, "vid": vid, "pid": pid,
+            "firmware_display": ptd.firmware_display,
+        }
+        with self._lock:
+            self.devices[our_id] = augmented
+
+    def _on_lcs_device_attached(self, lcs_dev: dict):
+        self._ingest_lcs_device(lcs_dev)
+        serial = lcs_dev.get("serialNumber", "")
+        our_id = serial[:8] if serial else lcs_dev.get("deviceId", "")[:8]
+        with self._lock:
+            dev = self.devices.get(our_id)
+        if not dev:
+            return
+        clean_dev = {k: v for k, v in dev.items() if not k.startswith("_")}
+        self.broadcast({
+            "type": "DeviceAttached",
+            "apiVersion": API_VERSION,
+            "device": clean_dev,
+        })
+        self._prewarm_dfu_cache(our_id)
+
+    def _on_lcs_device_updated(self, lcs_dev: dict):
+        self._ingest_lcs_device(lcs_dev)
+        serial = lcs_dev.get("serialNumber", "")
+        our_id = serial[:8] if serial else lcs_dev.get("deviceId", "")[:8]
+        with self._lock:
+            dev = self.devices.get(our_id)
+        if not dev:
+            return
+        clean_dev = {k: v for k, v in dev.items() if not k.startswith("_")}
+        self.broadcast({
+            "type": "DeviceUpdated",
+            "apiVersion": API_VERSION,
+            "device": clean_dev,
+        })
+
+    def _on_lcs_device_detached(self, lcs_device_id: str):
+        # LCS uses PLT_<serial>; our id is the 8-char prefix
+        serial_prefix = lcs_device_id[4:12] if lcs_device_id.startswith("PLT_") else lcs_device_id[:8]
+        with self._lock:
+            self.devices.pop(serial_prefix, None)
+        self.broadcast({
+            "type": "DeviceDetached",
+            "apiVersion": API_VERSION,
+            "deviceId": serial_prefix,
+        })
 
     def _device_scanner(self):
         """Periodically scan for new/removed devices and push events."""
@@ -1415,7 +1574,15 @@ class LensServer:
         return None
 
     def discover_devices(self):
-        """Scan for Poly devices. Returns set of current device IDs."""
+        """Scan for Poly devices. Returns set of current device IDs.
+
+        In proxy mode the LCS event stream (DeviceAttached/Updated/Detached)
+        is the source of truth, so this method just returns the current
+        snapshot without re-scanning USB. Standalone mode still does the
+        full HID discovery + native_bridge enumeration."""
+        if self.proxy_lcs and self._lcs_client:
+            with self._lock:
+                return set(self.devices.keys())
         try:
             from polytool import discover_devices, try_read_device_info, try_read_battery
             raw_devices = discover_devices()
@@ -1891,6 +2058,11 @@ def main():
     parser.add_argument("--dump", action="store_true", help="Dump all messages to dump.jsonl")
     parser.add_argument("--verbose", action="store_true", help="Show all protocol messages and debug output")
     parser.add_argument("--quiet", action="store_true", help="Suppress all output except errors")
+    parser.add_argument("--proxy", action="store_true",
+                        help="Run in LCS proxy mode: connect to the live "
+                             "Poly Lens Control Service as a client and "
+                             "augment its data with our overrides instead "
+                             "of replacing it standalone")
     parser.add_argument("--http", type=int, default=8080, metavar="PORT",
                         help="HTTP API port (default: 8080, 0 to disable)")
     args = parser.parse_args()
@@ -1898,23 +2070,31 @@ def main():
     _verbose = args.verbose
     _quiet = args.quiet
 
-    server = LensServer(port=args.port)
+    server = LensServer(port=args.port, proxy_lcs=args.proxy)
     server.dump_mode = getattr(args, 'dump', False)
     if server.dump_mode:
         server.dump_file = open('dump.jsonl', 'w')
         _log(f"  Dumping all messages to dump.jsonl")
 
-    # Discover devices (USB first, then BT via native bridge)
-    _log(f"  Scanning for USB devices...", verbose_only=True)
-    ids = server.discover_devices()
-    _log(f"  Found {len(ids)} USB device(s)", verbose_only=True)
+    # Proxy mode: connect to LCS first (start() does the actual connect),
+    # then we DON'T scan USB / native_bridge ourselves - LCS is the source
+    # of truth and pushes us its catalog after we register.
+    # Standalone mode: scan USB + BT first, then start the server.
+    if args.proxy:
+        _log(f"  Starting TCP server (proxy mode)...", verbose_only=True)
+        server.start()
+        nb_count = len(server.devices)
+        _log(f"  Imported {nb_count} device(s) from LCS proxy", verbose_only=True)
+    else:
+        _log(f"  Scanning for USB devices...", verbose_only=True)
+        ids = server.discover_devices()
+        _log(f"  Found {len(ids)} USB device(s)", verbose_only=True)
 
-    _log(f"  Scanning for BT devices via native bridge...", verbose_only=True)
-    server.discover_native_devices()
+        _log(f"  Scanning for BT devices via native bridge...", verbose_only=True)
+        server.discover_native_devices()
 
-    # Start server
-    _log(f"  Starting TCP server...", verbose_only=True)
-    server.start()
+        _log(f"  Starting TCP server...", verbose_only=True)
+        server.start()
 
     # Count settings per device
     def _settings_count(did):
