@@ -502,6 +502,24 @@ class LensServer:
         self._lcs_client.on_raw_message(self._on_lcs_raw_message)
         return True
 
+    def _our_id_from_lcs_dev(self, lcs_dev: dict) -> str:
+        """Compute the 8-char polytool-internal device id from an LCS
+        device record. Centralized so we don't repeat the slicing logic
+        and so the PLT_ prefix is correctly stripped before slicing.
+
+        Strategy:
+          1. Use the first 8 chars of serialNumber when available
+          2. Strip "PLT_" prefix from deviceId before slicing as fallback
+          3. Pad short serials so we don't return collisions
+        """
+        serial = (lcs_dev.get("serialNumber") or "").strip()
+        if serial:
+            return serial[:8].upper() if len(serial) >= 8 else serial.upper().ljust(8, "0")
+        did = lcs_dev.get("deviceId", "")
+        if did.startswith("PLT_"):
+            did = did[4:]
+        return did[:8].upper() if len(did) >= 8 else did.upper().ljust(8, "0")
+
     def _ingest_lcs_device(self, lcs_dev: dict):
         """Take a device record from LCS, apply our overrides (display
         name, FFFF strip, synthesized firmware version, update statuses)
@@ -510,7 +528,7 @@ class LensServer:
         # downstream code (settings cache, DFU cache, the HTTP API) keeps
         # using the same key it always has.
         serial = lcs_dev.get("serialNumber", "") or ""
-        our_id = serial[:8] if serial else lcs_dev.get("deviceId", "")[:8]
+        our_id = self._our_id_from_lcs_dev(lcs_dev)
         # Apply per-device overrides. Use polytool's PolyDevice classifier
         # to get model_description/display_name/firmware_components.
         from devices import PolyDevice, classify_device, _hydrate_from_lcs_cache
@@ -697,7 +715,6 @@ class LensServer:
             return
         plt_id = lcs_msg.get("deviceId", "")
         our_id = self._plt_to_our_id(plt_id) if plt_id else ""
-        client = self._proxy_pending_responses.get(plt_id)
         translated = dict(lcs_msg)
         if plt_id:
             translated["deviceId"] = our_id
@@ -724,10 +741,11 @@ class LensServer:
                 "settings": metadata_settings,
             }
             try:
-                if client:
-                    self.send_msg(client, metadata_msg)
-                else:
-                    self.broadcast(metadata_msg)
+                # Broadcast metadata to all clients - real LCS does the
+                # same, so Studio + CallControlApp + watchdog stay in sync.
+                # The previous "track originating client" approach lost
+                # responses when multiple clients raced.
+                self.broadcast(metadata_msg)
                 _log(f"  proxy <- LCS: synthesized DeviceSettingsMetadata "
                      f"({len(metadata_settings)} settings) for {our_id}",
                      verbose_only=True)
@@ -736,18 +754,17 @@ class LensServer:
                      verbose_only=True)
 
         try:
-            if client:
-                self.send_msg(client, translated)
-            else:
-                self.broadcast(translated)
+            # Broadcast to all clients (matches real LCS behavior - settings
+            # changes propagate to every connected client, not just the one
+            # that asked).
+            self.broadcast(translated)
             _log(f"  proxy <- LCS: {t} for {our_id}", verbose_only=True)
         except Exception as e:
             _log(f"  proxy: failed to forward {t}: {e}", verbose_only=True)
 
     def _on_lcs_device_attached(self, lcs_dev: dict):
         self._ingest_lcs_device(lcs_dev)
-        serial = lcs_dev.get("serialNumber", "")
-        our_id = serial[:8] if serial else lcs_dev.get("deviceId", "")[:8]
+        our_id = self._our_id_from_lcs_dev(lcs_dev)
         with self._lock:
             dev = self.devices.get(our_id)
         if not dev:
@@ -762,8 +779,7 @@ class LensServer:
 
     def _on_lcs_device_updated(self, lcs_dev: dict):
         self._ingest_lcs_device(lcs_dev)
-        serial = lcs_dev.get("serialNumber", "")
-        our_id = serial[:8] if serial else lcs_dev.get("deviceId", "")[:8]
+        our_id = self._our_id_from_lcs_dev(lcs_dev)
         with self._lock:
             dev = self.devices.get(our_id)
         if not dev:
