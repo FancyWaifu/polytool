@@ -71,6 +71,8 @@ from service import (
 
 from device_isolate import cmd_reset_pnp
 
+from lcs_control import cmd_lcs
+
 
 # ── Main Entry Point ─────────────────────────────────────────────────────────
 
@@ -203,6 +205,18 @@ def main():
              "(safety net for fix-setid runs that left devices disabled)",
     )
 
+    # lcs - control the Poly Lens Control Service backend
+    lcs_parser = subparsers.add_parser(
+        "lcs",
+        help="Control the Poly Lens Control Service (Poly's stock backend). "
+             "`lcs disable` stops it permanently so lensserver.py owns Studio "
+             "exclusively; `lcs enable` restores normal Auto-start; `lcs status` "
+             "shows current state.",
+    )
+    lcs_parser.add_argument("action", choices=["disable", "enable", "status"],
+                            nargs="?", default="status",
+                            help="What to do with LCS")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -229,6 +243,7 @@ def main():
         "service-start": cmd_service_start,
         "service-stop": cmd_service_stop,
         "reset-pnp": cmd_reset_pnp,
+        "lcs": cmd_lcs,
     }
 
     cmd_func = commands.get(args.command)

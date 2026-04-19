@@ -375,20 +375,26 @@ def fix_setid(serial, vid=0x047F, pid=None, pid_hex=None, version=None,
         return {"success": True, "message": f"dry-run — bundle at {bundle_path}",
                 "bundle_path": str(bundle_path)}
 
-    # Run LegacyDfu — wrap in device isolation so DFUManager.dll's
+    # Run LegacyDfu - wrap in device isolation so DFUManager.dll's
     # SetID::get_device (which routes by PID alone, not by serial) can't
     # land on a sibling device that would silently no-op the write.
     # Note: ensure_legacy_host_running() runs INSIDE the isolate block
-    # because isolate stops LCS (which kills LegacyHost) — we need a
+    # because isolate stops LCS (which kills LegacyHost) - we need a
     # fresh LegacyHost spawned after siblings are disabled.
+    #
+    # Also wrap in lcs_temporarily_enabled() so DFU works when the user
+    # has LCS persistently disabled (`polytool lcs disable`). That
+    # context manager is a no-op when LCS is already running normally.
+    import contextlib as _cl
+    from lcs_control import lcs_temporarily_enabled
+
     if isolate_siblings:
         from device_isolate import isolate as _isolate
         ctx = _isolate(serial, vid, pid, log=log)
     else:
-        import contextlib as _cl
         ctx = _cl.nullcontext()
 
-    with ctx:
+    with lcs_temporarily_enabled(log=log), ctx:
         if not ensure_legacy_host_running():
             return {"success": False,
                     "message": "LegacyHost.exe could not start or DFU pipe never appeared"}
@@ -494,14 +500,16 @@ def install_bundle(zip_path, vid, pid, serial, timeout=900,
     log(f"  VID=0x{vid:04X} PID=0x{pid:04X} serial={serial}")
     log("  This may take several minutes - do not unplug the device.")
 
+    import contextlib as _cl
+    from lcs_control import lcs_temporarily_enabled
+
     if isolate_siblings:
         from device_isolate import isolate as _isolate
         ctx = _isolate(serial, vid, pid, log=log)
     else:
-        import contextlib as _cl
         ctx = _cl.nullcontext()
 
-    with ctx:
+    with lcs_temporarily_enabled(log=log), ctx:
         if not ensure_legacy_host_running():
             return {"success": False,
                     "message": "LegacyHost.exe could not start or DFU pipe never appeared"}
