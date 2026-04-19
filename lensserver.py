@@ -151,6 +151,14 @@ class LensServer:
         # rewrites the file during its own startup or fix-setid's restart.
         self._start_port_file_watcher()
 
+        # Battery poller: refreshes battery state for every device every
+        # 30s and broadcasts DeviceUpdated when a value changes. Without
+        # this, Studio's battery icon stays at the level it was when the
+        # device first attached and never updates as charge changes.
+        import threading
+        threading.Thread(target=self._battery_poller, daemon=True,
+                         name="battery-poller").start()
+
     def _signal_shutdown(self):
         """Handle SIGTERM/SIGINT — stop cleanly."""
         self.running = False
@@ -515,6 +523,99 @@ class LensServer:
                  verbose_only=True)
         except Exception as e:
             _log(f"  push DFU to client failed: {e}", verbose_only=True)
+
+    def _refresh_device_battery(self, device_id, broadcast=True):
+        """Read the current battery state from native bridge, write it
+        into the device record, and (optionally) broadcast a DeviceUpdated
+        event so connected Poly Studio cards re-render their battery icon.
+
+        Studio reads battery from the per-device record's `battery`
+        sub-block (matching stock LCS's wire format). Updating that field
+        and pushing DeviceUpdated is the path Studio's UI hooks listen on.
+        """
+        if not self._native_bridge:
+            return False
+        with self._lock:
+            dev = self.devices.get(device_id, {})
+        if not dev:
+            return False
+
+        ptd = dev.get("_polytool_dev", {}) or {}
+        native_id = ptd.get("_native_id", "")
+        batt = None
+        if native_id:
+            batt = self._native_bridge.get_battery(native_id)
+        # Fallback: scan native devices for a PID match
+        if not batt:
+            try:
+                dev_pid = int(dev.get("pid", 0))
+            except (TypeError, ValueError):
+                dev_pid = 0
+            if dev_pid:
+                for nid, ndev in (self._native_bridge.get_devices() or {}).items():
+                    if ndev.get("pid") == dev_pid:
+                        batt = self._native_bridge.get_battery(nid)
+                        if batt and batt.get("level", -1) >= 0:
+                            # Cache the native_id so future lookups skip the scan
+                            ptd["_native_id"] = nid
+                            break
+        if not batt:
+            return False
+
+        raw_level = batt.get("level", -1)
+        # Native bridge reports level on a 0-5 scale for some devices and
+        # 0-100 for others. Normalize to percentage.
+        if 0 <= raw_level <= 5:
+            pct = raw_level * 20
+        elif raw_level > 5:
+            pct = min(100, raw_level)
+        else:
+            pct = -1
+
+        new_battery = {
+            "chargeLevel": pct,
+            "charging": bool(batt.get("charging", False)),
+            "docked": bool(batt.get("docked", False)),
+            "isChargeLevelValid": pct >= 0,
+            "level": raw_level,
+        }
+
+        with self._lock:
+            old = dev.get("battery", {}) or {}
+            dev["battery"] = new_battery
+            changed = (old.get("chargeLevel") != new_battery["chargeLevel"]
+                       or old.get("charging") != new_battery["charging"]
+                       or old.get("docked") != new_battery["docked"])
+
+        if broadcast and changed:
+            clean_dev = {k: v for k, v in dev.items() if not k.startswith("_")}
+            self.broadcast({
+                "type": "DeviceUpdated",
+                "apiVersion": API_VERSION,
+                "device": clean_dev,
+            })
+            _log(f"  Battery {device_id}: {pct}% "
+                 f"charging={new_battery['charging']} "
+                 f"docked={new_battery['docked']}", verbose_only=True)
+        return True
+
+    def _battery_poller(self):
+        """Background thread that refreshes battery for every connected
+        device every 30 seconds. Battery state changes regularly (charge,
+        dock, removal) and Studio expects continuous updates."""
+        while self.running:
+            try:
+                with self._lock:
+                    device_ids = list(self.devices.keys())
+                for did in device_ids:
+                    self._refresh_device_battery(did, broadcast=True)
+            except Exception as e:
+                _log(f"  battery poller error: {e}", verbose_only=True)
+            # Sleep in 1s chunks so server.stop() responds quickly
+            for _ in range(30):
+                if not self.running:
+                    return
+                time.sleep(1)
 
     def _push_battery(self, client_sock, device_id):
         """Push battery info as a compound DeviceSetting."""
@@ -1366,6 +1467,19 @@ class LensServer:
                     "isAbleToBePrimaryForCallControl": True,
                     "isMuted": False,
                     "isInCall": False,
+                    # Battery sub-block in the device record itself - this
+                    # is what Studio actually reads to render the battery
+                    # icon on the device card. (The DeviceSetting push in
+                    # _push_battery is for older Studio versions; the field
+                    # here is what current Studio uses.) Populated by
+                    # _refresh_device_battery() right after attach.
+                    "battery": {
+                        "chargeLevel": -1,
+                        "charging": False,
+                        "docked": False,
+                        "isChargeLevelValid": False,
+                        "level": -1,
+                    },
                     "state": "Online",
                     "supportData": {"state": "Supported"},
                     "multiComponentState": None,
@@ -1391,6 +1505,11 @@ class LensServer:
                 # _device_scanner already get this through its own pre-warm
                 # call; this covers the very-first discovery at startup.
                 self._prewarm_dfu_cache(device_id)
+
+                # Read battery from native bridge so the device record
+                # has real battery data the first time Studio renders it
+                # (no waiting for the next 30s poll cycle).
+                self._refresh_device_battery(device_id, broadcast=False)
 
             # Remove USB devices no longer present (preserve native bridge devices)
             with self._lock:
