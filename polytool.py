@@ -74,6 +74,27 @@ from device_isolate import cmd_reset_pnp
 from lcs_control import cmd_lcs
 
 
+def cmd_tray(args):
+    """Launch the polytray GUI (Windows-only auto-fix tool)."""
+    import subprocess as _sp
+    import os as _os
+    # Spawn detached so the polytool CLI returns immediately and the
+    # GUI keeps running. Use pythonw.exe when available so no console
+    # window is created.
+    here = _os.path.dirname(_os.path.abspath(__file__))
+    script = _os.path.join(here, "polytray.py")
+    py_dir = _os.path.dirname(sys.executable)
+    pyw = _os.path.join(py_dir, "pythonw.exe")
+    py = pyw if _os.path.exists(pyw) else sys.executable
+    DETACHED = 0x00000008
+    NO_WINDOW = 0x08000000
+    _sp.Popen([py, script],
+              creationflags=DETACHED | NO_WINDOW,
+              stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+              close_fds=True)
+    print("PolyTray launched.")
+
+
 # ── Main Entry Point ─────────────────────────────────────────────────────────
 
 def main():
@@ -205,6 +226,14 @@ def main():
              "(safety net for fix-setid runs that left devices disabled)",
     )
 
+    # tray
+    subparsers.add_parser(
+        "tray",
+        help="Launch the polytray GUI - watches for plugged-in Poly headsets "
+             "and auto-detects/fixes the FFFFFFFF firmware-version bug. "
+             "Windows only.",
+    )
+
     # lcs - control the Poly Lens Control Service backend
     lcs_parser = subparsers.add_parser(
         "lcs",
@@ -244,6 +273,7 @@ def main():
         "service-stop": cmd_service_stop,
         "reset-pnp": cmd_reset_pnp,
         "lcs": cmd_lcs,
+        "tray": cmd_tray,
     }
 
     cmd_func = commands.get(args.command)
