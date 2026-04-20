@@ -34,7 +34,7 @@ from devices import discover_devices, try_read_device_info, _hydrate_from_lcs_ca
 from setid_fix import diagnose_setid, fix_setid, read_lcs_device_cache
 
 
-POLL_INTERVAL_SEC = 4
+POLL_INTERVAL_SEC = 2
 BATTERY_RETRY_SEC = 60   # how often to re-attempt fix-setid for a low-battery device
 WINDOW_TITLE = "PolyTray - FFFF Auto-Fix"
 WINDOW_SIZE = "780x460"
