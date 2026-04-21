@@ -25,8 +25,9 @@ import threading
 import time
 import tkinter as tk
 import traceback
+import webbrowser
 from tkinter import font as tkfont
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 # Re-use polytool internals
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -46,6 +47,14 @@ _BATTERY_ERROR_MARKERS = (
     "code:5",
     "code: 5",
 )
+
+# Easter egg: type the trigger anywhere with the window focused, then enter the
+# password to launch the surprise. Buffer resets after _EG_IDLE_RESET_SEC of
+# inactivity so accidental subsequences across long pauses don't fire.
+_EG_TRIGGER = "VeteransUnited"
+_EG_PASSWORD = "ProtectThisHouse!"
+_EG_VIDEO_ID = "hf1DkBQRQj4"
+_EG_IDLE_RESET_SEC = 3.0
 
 
 def _is_battery_error(msg: str) -> bool:
@@ -72,8 +81,13 @@ class PolyTray:
         self._auto_fix = tk.BooleanVar(value=False)  # ask first by default
         self._stop_event = threading.Event()
 
+        self._eg_buffer = ""
+        self._eg_last_ts = 0.0
+        self._eg_open = False
+
         self._build_ui()
         self._start_poller()
+        self.root.bind_all("<KeyPress>", self._on_key_easter_egg, add="+")
 
         # Clean shutdown on window close
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -488,6 +502,50 @@ class PolyTray:
                f"  - Another device of the same model is interfering\n\n"
                f"Last log lines:\n" + "\n".join(log_lines[-6:]))
         messagebox.showerror("Fix Failed", msg, parent=self.root)
+
+    # ── Easter egg ──────────────────────────────────────────────────────
+
+    def _on_key_easter_egg(self, event):
+        if self._eg_open:
+            return
+        ch = event.char
+        if not ch or not ch.isprintable():
+            return
+        now = time.time()
+        if now - self._eg_last_ts > _EG_IDLE_RESET_SEC:
+            self._eg_buffer = ""
+        self._eg_last_ts = now
+        self._eg_buffer = (self._eg_buffer + ch)[-len(_EG_TRIGGER):]
+        if self._eg_buffer == _EG_TRIGGER:
+            self._eg_buffer = ""
+            self._prompt_easter_egg()
+
+    def _prompt_easter_egg(self):
+        self._eg_open = True
+        try:
+            answer = simpledialog.askstring(
+                "Veterans United",
+                "Password:",
+                show="*",
+                parent=self.root,
+            )
+            if answer == _EG_PASSWORD:
+                self._launch_easter_egg_video()
+        finally:
+            self._eg_open = False
+
+    def _launch_easter_egg_video(self):
+        # Open the YouTube watch page directly with autoplay + start_radio
+        # query params. We tried the iframe-embed route to force autoplay,
+        # but this video isn't embeddable (YouTube returns "Video player
+        # configuration error 153" inside iframes). The watch URL plays
+        # without the embed restrictions, and the browser generally honors
+        # autoplay since users have YouTube Media Engagement.
+        webbrowser.open(
+            f"https://www.youtube.com/watch?v={_EG_VIDEO_ID}"
+            "&autoplay=1&start_radio=1",
+            new=2,
+        )
 
     # ── Lifecycle ───────────────────────────────────────────────────────
 
