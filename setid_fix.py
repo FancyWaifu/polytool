@@ -225,16 +225,27 @@ def ensure_legacy_host_running(timeout=15):
 
 # ── Bundle forging ──────────────────────────────────────────────────────────
 
-def build_setid_bundle(pid_hex, version, out_path):
+def build_setid_bundle(pid_hex, version, out_path, bundle_version=None):
     """Write a minimal firmware bundle .zip containing only a setid component.
 
     pid_hex is e.g. "0xAC28" (matches Poly's rules.json convention).
-    version is the dotted "<major>.<minor>.<revision>.<build>" string.
+    version is the dotted "<major>.<minor>.<revision>.<build>" string — this is
+    what actually gets written to the device's SetID NVRAM.
+
+    bundle_version overrides the rules.json top-level "version" field. Defaults
+    to `version` (the original coupled behavior). Pass a distinct placeholder
+    like "9999.9999.9999.9999" to bypass LegacyDfu's bundle smart-skip — it
+    compares the top-level version against the device's current component
+    rollup and returns "Same version / up to date" (exit 402) when they match.
+    Needed when writing SetID values whose string form collides with real
+    firmware bundle versions (e.g. fleet target "1071.1054.3038.0").
     """
     parse_setid_string(version)  # validate format
+    if bundle_version is None:
+        bundle_version = version
 
     rules = {
-        "version": version,
+        "version": bundle_version,
         "type": "firmware",
         "components": [{
             "type": "setid",
@@ -337,14 +348,19 @@ def run_legacy_dfu(zip_path, vid, pid, serial, timeout=120, progress_cb=None):
 # ── High-level workflow ─────────────────────────────────────────────────────
 
 def fix_setid(serial, vid=0x047F, pid=None, pid_hex=None, version=None,
-              dry_run=False, isolate_siblings=True, log=print):
+              bundle_version=None, dry_run=False, isolate_siblings=True,
+              log=print):
     """Write a fresh SetID to a Poly device's NVRAM.
 
-    serial   — full device serial (32-char hex like "049160FE6715450F8A4FB...")
-    vid/pid  — USB IDs. pid is decimal (44072), pid_hex is "0xAC28".
-    version  — dotted "<major>.<minor>.<revision>.<build>". Defaults to
-               "0001.0000.0000.0001" if None.
-    dry_run  — build the bundle but don't run LegacyDfu.
+    serial         — full device serial (32-char hex)
+    vid/pid        — USB IDs. pid is decimal (44072), pid_hex is "0xAC28".
+    version        — dotted "<major>.<minor>.<revision>.<build>". Defaults to
+                     "0001.0000.0000.0001" if None.
+    bundle_version — optional override for the rules.json top-level version.
+                     Pass "9999.9999.9999.9999" (or any clearly-distinct value)
+                     when `version` collides with real bundle versions, to
+                     bypass LegacyDfu's smart-skip. See build_setid_bundle.
+    dry_run        — build the bundle but don't run LegacyDfu.
 
     Returns dict with 'success' bool and 'message' explaining what happened.
     """
@@ -368,8 +384,12 @@ def fix_setid(serial, vid=0x047F, pid=None, pid_hex=None, version=None,
     # Forge the bundle
     tmpdir = Path(tempfile.mkdtemp(prefix="polytool_setid_"))
     bundle_path = tmpdir / f"setid_{pid_hex.lower()}.zip"
-    build_setid_bundle(pid_hex, version, bundle_path)
-    log(f"  Forged bundle: {bundle_path}")
+    build_setid_bundle(pid_hex, version, bundle_path, bundle_version=bundle_version)
+    if bundle_version and bundle_version != version:
+        log(f"  Forged bundle: {bundle_path}  (top-level={bundle_version}, "
+            f"setid-component={version})")
+    else:
+        log(f"  Forged bundle: {bundle_path}")
 
     if dry_run:
         return {"success": True, "message": f"dry-run — bundle at {bundle_path}",

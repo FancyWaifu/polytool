@@ -33,6 +33,7 @@ from tkinter import messagebox, simpledialog, ttk
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from devices import discover_devices, try_read_device_info, _hydrate_from_lcs_cache
 from setid_fix import diagnose_setid, fix_setid, read_lcs_device_cache
+from fleet_target import resolve_setid_target
 
 
 POLL_INTERVAL_SEC = 2
@@ -426,13 +427,29 @@ class PolyTray:
                 # Update status bar live (just the latest line)
                 self._set_status(f"Fixing: {str(line)[-80:]}")
 
+            # Pick the SetID value that matches what Poly Studio treats as
+            # "current" for this host. Writing the default 0001.0000.0000.0001
+            # clears the FFFF bug but leaves a phantom Update Software button
+            # because FirmwareVersion ("1.0.0.1") doesn't match Studio's
+            # target string (fleet-pushed or cloud-latest).
+            target_version, target_source = resolve_setid_target(dev.serial, dev.pid)
+            _log(f"SetID target: {target_version}  (source: {target_source})")
+
+            # Use a decoupled bundle so LegacyDfu doesn't smart-skip when
+            # the target version string collides with a real firmware bundle
+            # (e.g. "1071.1054.3038.0" would otherwise be interpreted as
+            # usb=1071,headset=1054,tuning=3038 — matching the device's
+            # components and getting rejected with exit 402 "Same version").
             result = fix_setid(
                 serial=dev.serial,
                 vid=dev.vid,
                 pid=dev.pid,
+                version=target_version,
+                bundle_version="9999.9999.9999.9999",
                 isolate_siblings=True,
                 log=_log,
             )
+            result["target_source"] = target_source
             self._fixing_serials.discard(dev.serial)
 
             if result.get("success"):
@@ -482,12 +499,19 @@ class PolyTray:
 
     def _show_success(self, dev, result):
         self._set_status(f"Fixed: {dev.display_name or dev.friendly_name}")
+        source_explanation = {
+            "fleet":    "matched to fleet-managed target (Lens Manager)",
+            "cloud":    "matched to Poly Cloud latest firmware",
+            "fallback": "default placeholder — no tenant or cloud data",
+        }.get(result.get("target_source", ""), "")
+        source_line = f"  Source:  {source_explanation}\n" if source_explanation else ""
         messagebox.showinfo(
             "Fixed!",
             f"SetID NVRAM written successfully.\n\n"
             f"  Device:  {dev.display_name or dev.friendly_name}\n"
             f"  Tattoo:  {dev.tattoo_serial or 'n/a'}\n"
-            f"  Wrote:   {result.get('version_written', '?')}\n\n"
+            f"  Wrote:   {result.get('version_written', '?')}\n"
+            f"{source_line}\n"
             f"Re-dock the headset to refresh Poly Studio's display.",
             parent=self.root,
         )
