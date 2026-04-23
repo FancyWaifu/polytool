@@ -88,6 +88,23 @@ def _comp(dev, key):
     return _format_component_version(raw)
 
 
+def _synth_bundle_fw(dev):
+    """Build a bundle-style firmware string like "1082.1065.3038".
+
+    Why: LCS's FirmwareVersion is a single component ("1082") on Savi firmware
+    10.82+ where the setId field got dropped. Poly Studio compares that against
+    the cloud's bundle version (e.g. "1082.1065.3038") and shows a phantom
+    Update Software button even when the device is up-to-date. Feeding Studio
+    the full usb.headset.tuning triple makes the comparison resolve cleanly.
+    """
+    usb = _comp(dev, "usb")
+    hs  = _comp(dev, "headset")
+    tu  = _comp(dev, "tuning")
+    if not (usb and hs and tu):
+        return ""
+    return f"{usb.replace('.', '')}.{hs.replace('.', '')}.{tu.replace('.', '')}"
+
+
 MSG_DELIM = "\x01"  # SOH byte — real LensService message separator (NOT newline)
 
 # Port file location (platform-specific)
@@ -577,14 +594,15 @@ class LensServer:
         augmented["deviceName"] = disp_name
         augmented["displaySerialNumber"] = ptd.tattoo_serial or serial or ""
         augmented["tattooSerialNumber"] = ptd.tattoo_serial or serial or ""
-        # Prefer LCS's firmwareVersion (it knows the real value via the
-        # device cache) over PolyDevice.firmware_display (which derives
-        # from USB bcdDevice and is "unknown" without release_number,
-        # which we don't have when constructing PolyDevice from the LCS
-        # payload). Only fall back to PolyDevice when LCS gave us nothing.
+        # Prefer a synthesized bundle-style string ("1082.1065.3038") when we
+        # have per-component data — that matches the cloud's bundle format so
+        # Studio's Current-vs-Available comparison resolves cleanly. Fall back
+        # to LCS's firmwareVersion (which may be a single component for
+        # firmware 10.82+), then PolyDevice.firmware_display (USB bcdDevice).
         lcs_fw = (lcs_dev.get("firmwareVersion") or "").strip()
         derived_fw = ptd.firmware_display if ptd.firmware_display != "unknown" else ""
-        augmented["firmwareVersion"] = lcs_fw or derived_fw or "unknown"
+        synth_fw = _synth_bundle_fw(ptd)
+        augmented["firmwareVersion"] = synth_fw or lcs_fw or derived_fw or "unknown"
         augmented["firmwareComponents"] = {
             "usbVersion": _comp(ptd, "usb") or ptd.firmware_display,
             "baseVersion": _comp(ptd, "base"),
